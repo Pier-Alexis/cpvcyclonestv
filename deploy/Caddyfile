@@ -1,0 +1,18 @@
+cpvcyclonestv.live {
+	encode zstd gzip
+
+	@media path_regexp media (?i)^/(videos|provincialuno)/.*\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi)$
+	handle @media {
+		root * /home/acer/cpvcyclonesviewer
+		header Cache-Control "public, max-age=10800"
+		file_server
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}

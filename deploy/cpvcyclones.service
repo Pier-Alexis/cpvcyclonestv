@@ -1,0 +1,16 @@
+[Unit]
+Description=CPV Cyclones video viewer
+After=network.target
+
+[Service]
+Type=simple
+User=acer
+WorkingDirectory=/home/acer/cpvcyclonesviewer
+Environment=BEHIND_CADDY=1
+Environment=PORT=8080
+ExecStart=/usr/bin/node /home/acer/cpvcyclonesviewer/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

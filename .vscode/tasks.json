@@ -1,0 +1,54 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "SSH vers Acer (192.168.1.117)",
+			"type": "shell",
+			"command": "ssh",
+			"args": [
+				"-o",
+				"StrictHostKeyChecking=accept-new",
+				"acer@192.168.1.117"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Vérifier DNS, Caddy et services Acer",
+			"type": "shell",
+			"command": "ssh",
+			"args": [
+				"-o",
+				"StrictHostKeyChecking=accept-new",
+				"acer@192.168.1.117",
+				"bash -lc 'echo ===HOST===; hostname; echo ===PROJECT===; pwd; ls -l /home/acer/cpvcyclonesviewer/deploy 2>&1; echo ===NODE===; node -v 2>&1; echo ===SERVICES===; systemctl is-enabled cpvcyclones caddy 2>&1; systemctl is-active cpvcyclones caddy 2>&1; echo ===CADDY_CONFIG===; sudo -n cat /etc/caddy/Caddyfile 2>&1; echo ===CADDY_VALIDATE===; sudo -n caddy validate --config /etc/caddy/Caddyfile 2>&1; echo ===APP_UNIT===; sudo -n cat /etc/systemd/system/cpvcyclones.service 2>&1; echo ===PORTS===; ss -ltnup 2>&1; echo ===DNS===; getent ahostsv4 cpvcyclonestv.live; echo ===LOCAL_APP===; curl -sS -o /dev/null -w \"%{http_code}\\n\" http://127.0.0.1:8080/ 2>&1; echo ===LOCAL_HTTPS===; curl -sk -o /dev/null -w \"%{http_code}\\n\" --resolve cpvcyclonestv.live:443:127.0.0.1 https://cpvcyclonestv.live/ 2>&1'"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Vérifier la configuration sur Acer",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Get-Content -Raw 'C:\\Users\\piera\\cpvcyclones video viewer\\deploy\\check-acer.sh' | ssh -T -o StrictHostKeyChecking=accept-new acer@192.168.1.117 bash"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Vérifier Acer (diagnostic)",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Get-Content -Raw deploy\\check-acer.sh | ssh -T -o StrictHostKeyChecking=accept-new acer@192.168.1.117 bash"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

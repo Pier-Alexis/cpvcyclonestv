@@ -1,0 +1,536 @@
+{
+  "siteTitle": "CyclonesTV",
+  "siteSubtitle": "‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎ ‎",
+  "adminTitle": "ma super page d'admin",
+  "logoPageTitle": "secret non nécessaire",
+  "accentColor": "#114479",
+  "hint": "cliquer sur la vidéo pour la charger",
+  "folders": [
+    {
+      "id": "courte-piste",
+      "name": "Courte Piste",
+      "children": []
+    },
+    {
+      "id": "longue-piste",
+      "name": "Longue Piste",
+      "children": []
+    },
+    {
+      "id": "entrainement",
+      "name": "Entraînement",
+      "children": []
+    },
+    {
+      "id": "folder-mv08l36i-iem0wn6",
+      "name": "Archives",
+      "children": [
+        {
+          "id": "folder-mv08l9bb-n9ycekv",
+          "name": "Courte Piste",
+          "children": []
+        },
+        {
+          "id": "folder-mv08lchj-gzi76w2",
+          "name": "Longue Piste",
+          "children": []
+        }
+      ]
+    }
+  ],
+  "tabs": [
+    {
+      "name": "Provincial 1A Rimouski - Samedi",
+      "src": "provincialuno/Provincial%201A%20Rimouski%203%20oct%20-%20Samedi.mp4",
+      "poster": "",
+      "folderId": "courte-piste",
+      "qualities": [
+        {
+          "name": "av1",
+          "src": "videos/AV1/SamediAV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": [
+        {
+          "t": 1220,
+          "label": "Élodie 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 1370,
+          "label": "Julia 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 1510,
+          "label": "Éloise 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 2085,
+          "label": "Elsa 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 3780,
+          "label": "Charles 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 4560,
+          "label": "Jules - Chri 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 4700,
+          "label": "Will 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 5055,
+          "label": "Pa 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 5520,
+          "label": "Gab 500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 7445,
+          "label": "Élodie 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 7720,
+          "label": "Julia 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 7970,
+          "label": "Elsa 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 9510,
+          "label": "Charles 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 10850,
+          "label": "Will - Jules 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 11240,
+          "label": "Pa - Chri 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 11750,
+          "label": "Gab 1500m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 15770,
+          "label": "Julia - Élodie 1500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 16105,
+          "label": "Éloise 1500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 16530,
+          "label": "Elsa 1500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 17945,
+          "label": "Charles 1500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 19015,
+          "label": "Jules - Chri 1500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 19260,
+          "label": "Pa - Will 1500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 19550,
+          "label": "Gab 5:25:50",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 21490,
+          "label": "Groupe 2f Relais",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 21820,
+          "label": "Groupe 3f Relais",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 23610,
+          "label": "Groupe 2m Relais",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 24360,
+          "label": "Groupe 4m Relais",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 24676,
+          "label": "Groupe 5m Relais",
+          "color": "#4d7ea6"
+        }
+      ]
+    },
+    {
+      "name": "Provincial 1A - Dimanche",
+      "src": "provincialuno/Provincial%201A%20Rimouski%204%20oct%20-%20Dimanche.mp4",
+      "poster": "",
+      "folderId": "courte-piste",
+      "qualities": [
+        {
+          "name": "av1",
+          "src": "videos/AV1/DimancheAV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": [
+        {
+          "t": 1210,
+          "label": "Éloise 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 1400,
+          "label": "Julia 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 1580,
+          "label": "Élodie 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 1800,
+          "label": "Elsa 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 5210,
+          "label": "Charles 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 5900,
+          "label": "Jules 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 6090,
+          "label": "Chri 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 6330,
+          "label": "Pa - Will 1000m qualif // chute à 5",
+          "color": "#ff0000"
+        },
+        {
+          "t": 6590,
+          "label": "Gab 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 7185,
+          "label": "Pa 1000m qualif",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 9030,
+          "label": "Julia 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 9390,
+          "label": "Élodie - Éloise 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 9810,
+          "label": "Elsa 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 12150,
+          "label": "Charles 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 13260,
+          "label": "Jules - Chri 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 13480,
+          "label": "Pa 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 13650,
+          "label": "Will 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 13840,
+          "label": "Gab 1000m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 17690,
+          "label": "Julia 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 17940,
+          "label": "Élodie 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 18240,
+          "label": "Éloise 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 18720,
+          "label": "Elsa 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 21225,
+          "label": "Charles 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 21900,
+          "label": "Jules - Chri - Will 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 22025,
+          "label": "Pa 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 22520,
+          "label": "Gab 500m demi finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 24640,
+          "label": "Julia 500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 24760,
+          "label": "Élodie 500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 24880,
+          "label": "Éloise 500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 25180,
+          "label": "Elsa 500m finale",
+          "color": "#4d7ea6"
+        },
+        {
+          "t": 28980,
+          "label": "Charles 500m finale",
+          "color": "#4d7ea6"
+        }
+      ]
+    },
+    {
+      "name": "Provincial 4A jour 2 2026",
+      "src": "videos/Provincial%204A%20Rimouski%208%20mars.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Provincial%204A%20Rimouski%208%20Mars%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Provincial 4A jour 1 2026",
+      "src": "videos/Provincial%204A%20Rimouski%207%20mars.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Provincial%204A%20Rimouski%207%20Mars%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Provincial 3A Montréal 2026",
+      "src": "videos/Provincial%203A%20Montr%C3%A9al.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Provincial%203A%20Montr%C3%A9al%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Provincial 2B Chicoutimi 2025",
+      "src": "videos/Provincial%202B%20Chicoutimi.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Provincial%202B%20Chicoutimi%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Provincial 1D RDL 2025",
+      "src": "videos/Provincial%201D%20RDL%2012%20oct.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Provincial%201D%20Rdl%2012%20Oct%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Championnats Québecois CP jour 2 2026",
+      "src": "videos/Championnats%20Qu%C3%A9becois%20CP%205%20avril%202026%20Rim.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Championnats%20Qu%C3%A9becois%20Cp%205%20Avril%202026%20Rim%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Championnats Québecois CP jour 1 2026",
+      "src": "videos/Championnats%20Qu%C3%A9becois%20CP%204%20avril%202026%20Rim.mp4",
+      "poster": "",
+      "folderId": "folder-mv08l9bb-n9ycekv",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Championnats%20Qu%C3%A9becois%20Cp%204%20Avril%202026%20Rim%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Coupe Québec 1 jour 2",
+      "src": "videos/Coupe%20Qu%C3%A9bec%201%20jour%202.mp4",
+      "poster": "",
+      "folderId": "longue-piste",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Coupe%20Qu%C3%A9bec%201%20Jour%202%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Coupe Québec 1 jour 1",
+      "src": "videos/Coupe%20Qu%C3%A9bec%201%20jour%201%20vrai.mp4",
+      "poster": "",
+      "folderId": "longue-piste",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Coupe%20Qu%C3%A9bec%201%20Jour%201%20Vrai%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Championnats Québecois LP Jeunesse 2026",
+      "src": "videos/Championnats%20Qu%C3%A9becois%20LP%202026.mp4",
+      "poster": "",
+      "folderId": "folder-mv08lchj-gzi76w2",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Championnats%20Qu%C3%A9becois%20Jeunesse%20Lp%202026%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Coupe Jeunesse 2 2026",
+      "src": "videos/Coupe%20Jeunesse%202%202026.mp4",
+      "poster": "",
+      "folderId": "folder-mv08lchj-gzi76w2",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Coupe%20Jeunesse%202%202026%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    },
+    {
+      "name": "Coupe Jeunesse 1 2025",
+      "src": "videos/Coupe%20Jeunesse%201%202026.mp4",
+      "poster": "",
+      "folderId": "folder-mv08lchj-gzi76w2",
+      "qualities": [
+        {
+          "name": "AV1",
+          "src": "videos/AV1/Coupe%20Jeunesse%201%202026%20--%20AV1.mp4",
+          "auto": true
+        }
+      ],
+      "timecodes": []
+    }
+  ]
+}

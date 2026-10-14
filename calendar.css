@@ -1,0 +1,90 @@
+:root {
+  --accent: #4d7ea6;
+  --bg: #10161d;
+  --bg2: #151e28;
+  --panel: #18232e;
+  --panel2: #202d39;
+  --line: #31414e;
+  --text: #e3e9ee;
+  --muted: #a3afb9;
+  --danger: #d97979;
+  --radius: 8px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+a { color: inherit; text-decoration: none; }
+button, select { font: inherit; }
+.calendar-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 62px; padding: 6px 18px; border-bottom: 1px solid var(--line); background: #0c1218; }
+.club-brand { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 700; white-space: nowrap; }
+.club-brand img { width: 72px; height: 48px; object-fit: contain; background: white; border-radius: 6px; }
+.calendar-topbar nav { display: flex; gap: 8px; }
+.calendar-topbar nav a { padding: 9px 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); font-size: 13.5px; font-weight: 600; }
+.calendar-topbar nav a:hover, .calendar-topbar nav a.active { border-color: #315f80; background: #315f80; color: white; }
+.calendar-main { width: min(1180px, calc(100% - 44px)); margin: 0 auto; padding: 30px 0 64px; }
+.calendar-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.eyebrow { margin: 0 0 7px; color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 5px; font-size: 26px; line-height: 1.2; }
+.intro { margin: 0; color: var(--muted); }
+.calendar-controls { display: flex; align-items: center; gap: 10px; }
+.calendar-controls h2 { min-width: 170px; margin: 0; text-align: center; font-size: 16px; text-transform: capitalize; }
+.icon-button, .today-button, .view-switch button { border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+.icon-button { width: 36px; height: 36px; border-radius: 6px; font-size: 24px; line-height: 1; }
+.today-button { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.icon-button:hover, .today-button:hover, .view-switch button:hover { border-color: var(--accent); background: var(--panel2); }
+.calendar-tools { display: flex; align-items: center; gap: 9px; padding: 18px 0; }
+.calendar-tools label { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.calendar-tools select { min-height: 38px; padding: 7px 34px 7px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel2); color: var(--text); }
+.view-switch { display: flex; margin-left: auto; }
+.view-switch button { padding: 8px 14px; font-size: 13px; font-weight: 600; }
+.view-switch button:first-child { border-radius: 8px 0 0 8px; }
+.view-switch button:last-child { margin-left: -1px; border-radius: 0 8px 8px 0; }
+.view-switch button.selected { position: relative; border-color: var(--accent); background: var(--accent); color: #07121a; }
+.month-grid { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.weekday-row, .day-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.weekday-row { background: var(--panel2); color: var(--muted); }
+.weekday-row span { padding: 10px 12px; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.day-cell { min-width: 0; min-height: 108px; padding: 8px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); }
+.day-cell:nth-child(7n) { border-right: 0; }
+.day-cell.outside { background: rgba(0, 0, 0, .12); }
+.day-cell time { display: inline-grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; font-size: 13px; font-weight: 700; }
+.day-cell time[datetime] { color: var(--text); }
+.day-events { display: grid; gap: 4px; margin-top: 4px; }
+.day-event { padding: 4px 6px; border-left: 3px solid var(--accent); background: rgba(77, 126, 166, .18); color: var(--text); font-size: 11px; font-weight: 600; line-height: 1.35; }
+.day-event span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.month-agenda { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; margin-top: 32px; }
+.month-agenda h2 { grid-column: 1 / -1; margin: 0 0 10px; font-size: 16px; }
+.event-row { display: flex; gap: 14px; padding: 16px 0; border-top: 1px solid var(--line); }
+.event-date { display: grid; align-content: start; justify-items: center; min-width: 44px; color: var(--accent); }
+.event-date strong { font-size: 21px; }
+.event-date span { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.event-info { min-width: 0; flex: 1; }
+.event-category { color: var(--accent); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.event-info h3 { margin: 2px 0 4px; font-size: 14px; }
+.event-info p { margin: 0 0 6px; color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+.event-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; color: var(--muted); font-size: 12px; }
+.event-meta span + span::before { content: '·'; margin-right: 14px; }
+.list-view { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
+.empty-state { grid-column: 1 / -1; padding: 42px 10px; text-align: center; color: var(--muted); }
+.error-state { color: var(--danger); }
+@media (max-width: 760px) {
+  .calendar-topbar { padding: 6px 12px; }
+  .calendar-topbar nav { gap: 0; }
+  .calendar-topbar nav a { padding: 8px 10px; font-size: 12px; }
+  .calendar-main { width: calc(100% - 32px); padding-top: 32px; }
+  .calendar-heading { align-items: flex-start; flex-direction: column; }
+  h1 { font-size: 24px; }
+  .calendar-controls { width: 100%; }
+  .calendar-controls h2 { flex: 1; min-width: 0; }
+  .day-cell { min-height: 78px; padding: 4px; }
+  .weekday-row span { padding: 7px 2px; text-align: center; font-size: 10px; }
+  .day-event { padding: 3px; font-size: 10px; }
+  .month-agenda, .list-view { grid-template-columns: 1fr; }
+}
+@media (max-width: 430px) {
+  .club-brand span { display: none; }
+  .club-brand img { width: 60px; height: 40px; }
+  .calendar-topbar nav a { font-size: 12px; }
+  .today-button { padding-inline: 8px; }
+  .day-cell { min-height: 66px; }
+}

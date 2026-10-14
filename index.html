@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c1218">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>CyclonesTV</title>
+<link rel="stylesheet" href="style.css?v=17">
+<link rel="icon" type="image/png" href="logo.png">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img class="logo" src="logo.png" alt="Cyclones — Viewer 2000">
+    <div class="brand-text">
+      <h1 id="siteTitle">CyclonesTV</h1>
+    </div>
+  </div>
+
+  <div class="tabs-control">
+    <button class="tabs-scroll" id="tabsScrollLeft" type="button" aria-label="Faire défiler les dossiers et vidéos vers la gauche" title="Défiler vers la gauche">&#8249;</button>
+    <nav class="tabs" id="tabs" aria-label="Dossiers et vidéos"></nav>
+    <button class="tabs-scroll" id="tabsScrollRight" type="button" aria-label="Faire défiler les dossiers et vidéos vers la droite" title="Défiler vers la droite">&#8250;</button>
+  </div>
+
+  <div class="top-actions">
+    <button class="btn ghost" id="sidebarToggle" type="button" title="Afficher / masquer les timecodes (S)">
+      <span class="btn-ico">&#9776;</span> Timecodes
+    </button>
+    <a class="btn ghost" href="admin.html" title="Panneau d'administration">&#9881;<span class="hide-sm">ma super page d'admin</span></a>
+  </div>
+</header>
+
+<main class="layout" id="layout">
+  <section class="stage" id="stage">
+    <div class="player" id="player">
+      <div class="videos" id="videos"></div>
+
+      <button class="big-play" id="bigPlay" type="button" aria-label="Lire">&#9654;</button>
+
+      <div class="chip" id="chip" hidden></div>
+      <div class="hint" id="hint"></div>
+
+      <div class="video-error" id="videoError" hidden role="alert" aria-live="assertive">
+        <strong>Vidéo introuvable</strong>
+        <span id="videoErrorPath"></span>
+        <em>Vérifiez le chemin du fichier configuré ou déposez la vidéo sur le serveur.</em>
+      </div>
+
+      <div class="controls" id="controls">
+        <div class="progress" id="progress">
+          <div class="track"></div>
+          <div class="buffered" id="buffered"></div>
+          <div class="played" id="played"></div>
+          <div class="markers" id="markers"></div>
+          <div class="thumb" id="thumb"></div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+
+        <div class="ctrl-row">
+          <button class="ctrl" id="playBtn" type="button" aria-label="Lecture / pause">&#9654;</button>
+          <button class="ctrl" id="backBtn" type="button" title="Reculer de 5 s">&#8630;</button>
+          <button class="ctrl" id="fwdBtn" type="button" title="Avancer de 5 s">&#8631;</button>
+          <span class="time" id="timeLabel">0:00 / 0:00</span>
+
+          <span class="spacer"></span>
+
+          <button class="ctrl" id="fsBtn" type="button" title="Plein écran (F)">&#9974;</button>
+          <button class="ctrl wide" id="sidebarToggle2" type="button" title="Timecodes (S)">&#9776;</button>
+          <div class="settings-wrap">
+            <button class="ctrl" id="settingsBtn" type="button" aria-label="Réglages vidéo" aria-expanded="false" aria-controls="settingsMenu" title="Réglages vidéo">&#9881;</button>
+            <div class="settings-menu" id="settingsMenu" aria-label="Réglages vidéo" hidden>
+              <p class="settings-title">Réglages vidéo</p>
+              <label class="settings-field" id="qualityField" for="quality" hidden>Qualité
+                <select id="quality" aria-label="Qualité vidéo"></select>
+              </label>
+              <p class="quality-info" id="qualityInfo">Qualité et débit : je ne m'appelle pas google ou youtube merci</p>
+              <label class="settings-field" for="speed">Vitesse de lecture (meilleur que youtube)
+                <select id="speed" aria-label="Vitesse de lecture">
+                  <option value="0.1">0,1&times;</option>
+                  <option value="0.25">0,25&times;</option>
+                  <option value="0.5">0.5&times;</option>
+                  <option value="0.75">0.75&times;</option>
+                  <option value="1" selected>1&times;</option>
+                  <option value="1.25">1.25&times;</option>
+                  <option value="1.5">1.5&times;</option>
+                  <option value="2">2&times;</option>
+                </select>
+              </label>
+              <div class="settings-volume">
+                <button class="ctrl" id="muteBtn" type="button" title="Couper le son" aria-label="Couper le son">&#128266;</button>
+                <label for="volume">Volume</label>
+                <input class="vol" id="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="sidebar" id="sidebar" aria-label="Timecodes">
+    <div class="side-head">
+      <div>
+        <h2>Timecodes</h2>
+        <p id="sideTabName">&mdash;</p>
+      </div>
+      <button class="ctrl" id="sideClose" type="button" title="Fermer">&#10005;</button>
+    </div>
+    <div class="tc-search-wrap">
+      <input id="tcSearch" type="search" placeholder="Rechercher un timecode…" aria-label="Rechercher dans les timecodes de cette vidéo" autocomplete="off">
+    </div>
+    <ul class="tc-list" id="tcList"></ul>
+    <div class="side-foot" id="sideFoot"></div>
+  </aside>
+</main>
+
+<div class="fatal" id="fatal" hidden>
+  <div class="fatal-box">
+    <strong id="fatalTitle">Impossible de charger la configuration</strong>
+    <p id="fatalMsg"></p>
+    <button class="btn" id="fatalRetry" type="button">Réessayer</button>
+  </div>
+</div>
+
+<script src="app.js?v=19"></script>
+</body>
+</html>

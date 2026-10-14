@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>CyclonesTV</title>
+<link rel="stylesheet" href="admin.css?v=15">
+<link rel="icon" type="image/png" href="logo.png">
+</head>
+<body data-accent="#22d3ee">
+
+<section class="login" id="login">
+  <div class="login-card">
+    <img class="login-logo" src="logo.png" alt="Cyclones — Viewer 2000">
+    <h1>Panneau d'administration</h1>
+    <p class="sub">CyclonesTV</p>
+    <form id="loginForm" autocomplete="off">
+      <input type="password" id="passInput" placeholder="Mot de passe" autocomplete="current-password" required>
+      <button class="btn primary wide" type="submit">Connexion</button>
+    </form>
+    <p class="err" id="loginErr" hidden></p>
+    <a class="back" href="index.html">&larr; Retour au viewer</a>
+  </div>
+</section>
+
+<div class="app" id="app" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <img class="logo" src="logo.png" alt="Cyclones — Viewer 2000">
+      <div>
+        <h1 id="adminTitle">Administration du viewer</h1>
+        <p>Gérez les outils du club depuis des rubriques distinctes</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <a class="btn" href="index.html" target="_blank">Voir le site</a>
+      <a class="btn" href="calendar.html" target="_blank">Voir le calendrier</a>
+      <a class="btn" href="/logo" target="_blank">Voir le logo</a>
+      <button class="btn" id="logoutBtn" type="button">Déconnexion</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="admin-intro">
+      <div>
+        <strong>Votre espace de gestion</strong>
+        <p>Les modifications ne sont publiées qu'après enregistrement.</p>
+      </div>
+      <span class="config-state" id="configState" role="status" aria-live="polite">Configuration chargée</span>
+    </div>
+
+    <nav class="admin-sections" aria-label="Rubriques d'administration">
+      <button class="admin-section-tab active" type="button" data-section="calendar">Calendrier</button>
+      <button class="admin-section-tab" type="button" data-section="general">Général</button>
+      <button class="admin-section-tab" type="button" data-section="videos">Vidéos</button>
+      <button class="admin-section-tab" type="button" data-section="files">Fichiers vidéo</button>
+      <button class="admin-section-tab" type="button" data-section="monitor">Diagnostic</button>
+    </nav>
+
+    <section class="card" data-admin-section="calendar">
+      <div class="card-head">
+        <div>
+          <h2>Calendrier du club</h2>
+          <p class="muted-note">Ajoutez les entraînements, compétitions et activités à venir.</p>
+        </div>
+        <button class="btn small" id="addEventBtn" type="button">+ Ajouter une activité</button>
+      </div>
+      <div id="calendarEditor" class="calendar-editor"></div>
+    </section>
+
+    <section class="card slim" data-admin-section="general" hidden>
+      <div class="card-head"><h2>Général</h2></div>
+      <div class="grid2">
+        <label>Titre du site
+          <input id="cfgTitle" maxlength="120">
+        </label>
+        <label>Sous-titre
+          <input id="cfgSubtitle" maxlength="160">
+        </label>
+        <label>Nom de la page d'administration
+          <input id="cfgAdminTitle" maxlength="120">
+        </label>
+        <label>Nom de l'onglet navigateur de la page logo
+          <input id="cfgLogoPageTitle" maxlength="120">
+        </label>
+        <label>Couleur d'accent
+          <span class="color-row">
+            <input type="color" id="cfgAccent" value="#22d3ee">
+            <input type="text" id="cfgAccentText" maxlength="40">
+          </span>
+        </label>
+        <label>Texte d'aide (affiché au démarrage sur la vidéo)
+          <input id="cfgHint" maxlength="200">
+        </label>
+      </div>
+    </section>
+
+    <section class="card" data-admin-section="videos" hidden>
+      <div class="card-head">
+        <h2>Vidéos &amp; onglets</h2>
+        <button class="btn small" id="addTabBtn" type="button">+ Ajouter un onglet</button>
+      </div>
+      <p class="muted-note">Chaque onglet possède sa vidéo, son aperçu et ses timecodes. Les chemins sont relatifs à la racine du site. Utilisez les flèches pour réordonner les vidéos dans leur dossier de la barre du haut.</p>
+      <div class="folder-manager">
+        <div class="folder-manager-head">
+          <h3>Dossiers de la barre du haut</h3>
+          <button class="btn small" id="addRootFolderBtn" type="button">+ Créer un dossier racine</button>
+        </div>
+        <div id="folderTree" class="folder-tree"></div>
+      </div>
+      <div class="tab-tools">
+        <label class="tab-search">Rechercher une vidéo
+          <input id="tabSearch" type="search" placeholder="Nom ou chemin du fichier…" autocomplete="off">
+        </label>
+        <span id="tabFilterStatus" class="tab-filter-status" role="status" aria-live="polite"></span>
+        <div class="tab-bulk-actions">
+          <button class="btn small" id="collapseTabsBtn" type="button">Tout réduire</button>
+          <button class="btn small" id="expandTabsBtn" type="button">Tout développer</button>
+        </div>
+      </div>
+      <div id="tabsEditor"></div>
+    </section>
+
+    <section class="card" data-admin-section="files" hidden>
+      <div class="card-head"><h2>Fichiers vidéo</h2></div>
+      <p class="muted-note">Les fichiers envoyés depuis ce panneau sont enregistrés sur le serveur dans <code>videos/</code>. Les vidéos présentes dans ses sous-dossiers sont également proposées dans les sélecteurs. Pour une vidéo dans un autre dossier du serveur, indiquez son chemin dans l'onglet. Formats acceptés : .mp4, .m4v, .webm, .ogv, .mov, .mkv, .avi.</p>
+      <div class="upload-row">
+        <label class="btn primary" for="uploadInput">&#8679; Uploader une vidéo</label>
+        <input type="file" id="uploadInput" accept="video/*,.mp4,.m4v,.webm,.ogv,.mov,.mkv,.avi" hidden>
+        <progress id="uploadProg" max="100" value="0" hidden></progress>
+        <span id="uploadMsg"></span>
+      </div>
+      <ul class="vlist" id="videoList"></ul>
+    </section>
+
+    <section class="card" data-admin-section="monitor" hidden>
+      <div class="card-head">
+        <h2>Monitoring &amp; diagnostic</h2>
+        <button class="btn small" id="refreshMonitorBtn" type="button">Actualiser</button>
+      </div>
+      <div class="monitor-grid">
+        <div class="metric-box">
+          <span>Ping serveur</span>
+          <strong id="monitorPing">—</strong>
+        </div>
+        <div class="metric-box">
+          <span>État</span>
+          <strong id="monitorStatus">—</strong>
+        </div>
+        <div class="metric-box">
+          <span>Espace disque</span>
+          <strong id="monitorDisk">—</strong>
+        </div>
+        <div class="metric-box">
+          <span>Vidéos dans le catalogue</span>
+          <strong id="monitorVideoCount">—</strong>
+        </div>
+      </div>
+      <div class="monitor-columns">
+        <div class="mini-panel">
+          <h3>Erreurs de lecture vidéo</h3>
+          <ul id="monitorVideoErrors" class="monitor-list"></ul>
+        </div>
+        <div class="mini-panel">
+          <h3>Dernières vidéos visionnées</h3>
+          <ul id="monitorRecent" class="monitor-list"></ul>
+        </div>
+        <div class="mini-panel">
+          <h3>Journal d’actions</h3>
+          <ul id="monitorActions" class="monitor-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card actions">
+      <button class="btn primary big" id="saveBtn" type="button">&#128190; Enregistrer</button>
+      <button class="btn" id="exportBtn" type="button">Exporter JSON</button>
+      <label class="btn">Importer JSON
+        <input type="file" id="importInput" accept=".json,application/json" hidden>
+      </label>
+      <button class="btn" id="pwBtn" type="button">Changer le mot de passe</button>
+    </section>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="admin.js?v=19"></script>
+</body>
+</html>

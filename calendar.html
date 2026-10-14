@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c1218">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>Calendrier — CPV Cyclones</title>
+<link rel="stylesheet" href="calendar.css?v=2">
+<link rel="icon" type="image/png" href="logo.png">
+</head>
+<body>
+<header class="calendar-topbar">
+  <a class="club-brand" href="index.html"><img src="logo.png" alt=""><span>CPV Cyclones</span></a>
+  <nav aria-label="Navigation principale"><a href="index.html">Vidéos</a><a class="active" href="calendar.html" aria-current="page">Calendrier</a><a href="admin.html">Administration</a></nav>
+</header>
+<main class="calendar-main">
+  <section class="calendar-heading">
+    <div><p class="eyebrow">La saison du club</p><h1>Calendrier</h1><p class="intro">Entraînements, compétitions et activités à venir.</p></div>
+    <div class="calendar-controls">
+      <button class="icon-button" id="previousMonth" type="button" aria-label="Mois précédent">‹</button>
+      <h2 id="monthTitle" aria-live="polite"></h2>
+      <button class="icon-button" id="nextMonth" type="button" aria-label="Mois suivant">›</button>
+      <button class="today-button" id="todayButton" type="button">Aujourd'hui</button>
+    </div>
+  </section>
+  <section class="calendar-tools" aria-label="Filtres du calendrier">
+    <label for="categoryFilter">Afficher</label>
+    <select id="categoryFilter"><option value="Toutes">Toutes les activités</option><option>Entraînement</option><option>Compétition</option><option>Activité sociale</option><option>Autre</option></select>
+    <div class="view-switch" role="group" aria-label="Affichage"><button type="button" class="selected" data-view="month" aria-pressed="true">Mois</button><button type="button" data-view="list" aria-pressed="false">Liste</button></div>
+  </section>
+  <section class="calendar-content" id="calendarContent" aria-live="polite"></section>
+</main>
+<script src="calendar.js?v=1"></script>
+</body>
+</html>

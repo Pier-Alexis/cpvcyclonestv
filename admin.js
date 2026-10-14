@@ -1,0 +1,1261 @@
+'use strict';
+
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+const loginEl = $('#login');
+const appEl = $('#app');
+const tabsEditor = $('#tabsEditor');
+
+let pass = '';
+let config = null;
+let videoFiles = [];
+const ACTION_LOG_KEY = 'cpvViewer:actions';
+const VIDEO_ERROR_KEY = 'cpvViewer:videoErrors';
+const RECENT_KEY = 'cpvViewer:recent';
+const DEFAULT_FOLDERS = [
+  { id: 'courte-piste', name: 'Courte Piste', children: [] },
+  { id: 'longue-piste', name: 'Longue Piste', children: [] },
+  { id: 'entrainement', name: 'Entraînement', children: [] }
+];
+
+function setConfigDirty(dirty) {
+  const state = $('#configState');
+  if (!state) return;
+  state.textContent = dirty ? 'Modifications non enregistrées' : 'Configuration enregistrée';
+  state.classList.toggle('dirty', dirty);
+}
+
+/* ---------- tiny helpers ---------- */
+
+function fmtTime(s) {
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  return (h > 0 ? h + ':' : '') + mm + ':' + String(sec).padStart(2, '0');
+}
+
+function parseTime(str) {
+  if (typeof str !== 'string') return NaN;
+  const s = str.trim().replace(',', '.').replace('h', ':').replace('m', ':').replace('s', '');
+  if (!s) return NaN;
+  if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+  const parts = s.split(':').map((x) => parseFloat(x));
+  if (parts.some((x) => Number.isNaN(x))) return NaN;
+  let total = 0;
+  for (const p of parts) total = total * 60 + p;
+  return total;
+}
+
+function toast(msg, kind) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .4s'; }, 3200);
+  setTimeout(() => t.remove(), 3700);
+}
+
+function readLocalJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function writeLocalJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) { /* silencieux */ }
+}
+
+function recordAction(label, kind) {
+  const actions = Array.isArray(readLocalJSON(ACTION_LOG_KEY, [])) ? readLocalJSON(ACTION_LOG_KEY, []) : [];
+  actions.unshift({ label, kind, at: new Date().toISOString() });
+  writeLocalJSON(ACTION_LOG_KEY, actions.slice(0, 25));
+  renderActionLog();
+}
+
+function renderActionLog() {
+  const list = $('#monitorActions') || $('#actionLogList');
+  if (!list) return;
+  const actions = Array.isArray(readLocalJSON(ACTION_LOG_KEY, [])) ? readLocalJSON(ACTION_LOG_KEY, []) : [];
+  if (!actions.length) {
+    list.innerHTML = '<li class="empty-monitor">Aucune action enregistrée.</li>';
+    return;
+  }
+  list.innerHTML = actions.slice(0, 8).map((entry) => {
+    const time = new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return '<li class="monitor-item ' + (entry.kind || 'info') + '"><span>' + esc(entry.label) + '</span><small>' + esc(time) + '</small></li>';
+  }).join('');
+}
+
+function api(url, opts) {
+  opts = opts || {};
+  opts.credentials = opts.credentials || 'same-origin';
+  opts.headers = Object.assign({}, opts.headers);
+  if (pass) opts.headers['x-admin-pass'] = pass;
+  return fetch(url, opts).then(async (r) => {
+    let data = null;
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+    return data;
+  });
+}
+
+/* ---------- auth ---------- */
+
+async function init() {
+  configureLogin();
+  $('#logoutBtn').addEventListener('click', logout);
+  bindGlobals();
+
+  try {
+    await api('/api/verify');
+    return showApp();
+  } catch (e) {
+    pass = '';
+    showLogin();
+  }
+}
+
+function configureLogin() {
+  $('#loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = $('#loginErr');
+    err.hidden = true;
+    pass = $('#passInput').value;
+    try {
+      await api('/api/verify');
+      showApp();
+    } catch (e) {
+      err.textContent = 'Mot de passe incorrect.';
+      err.hidden = false;
+      $('#passInput').select();
+    }
+  });
+}
+
+function showLogin() {
+  loginEl.hidden = false;
+  appEl.hidden = true;
+  $('#passInput').focus();
+}
+
+async function logout() {
+  try {
+    await api('/api/logout', { method: 'POST' });
+  } catch (e) {
+    toast('Impossible de fermer la session : ' + e.message, 'err');
+    return;
+  }
+  recordAction('Déconnexion admin', 'info');
+  pass = '';
+  location.reload();
+}
+
+/* ---------- load & render ---------- */
+
+async function showApp() {
+  loginEl.hidden = true;
+  appEl.hidden = false;
+  try {
+    const [cfg, vid] = await Promise.all([
+      api('/api/config'),
+      api('/api/videos').catch(() => ({ videos: [] }))
+    ]);
+    config = cfg;
+    videoFiles = vid.videos || [];
+    config.folders = mergeDiscoveredFolders(config.folders || DEFAULT_FOLDERS, videoFiles.map((file) => file.name));
+    render();
+    setConfigDirty(false);
+    refreshMonitor();
+    renderActionLog();
+  } catch (e) {
+    toast('Impossible de charger la configuration : ' + e.message, 'err');
+  }
+}
+
+function render() {
+  fillGlobal();
+  renderCalendarEditor();
+  renderFolderTree();
+  renderTabs();
+  renderVideoList();
+  setAccentPreview();
+  renderActionLog();
+}
+
+function renderCalendarEditor() {
+  const editor = $('#calendarEditor');
+  const events = Array.isArray(config.calendar) ? config.calendar : [];
+  if (!events.length) {
+    editor.innerHTML = '<p class="calendar-empty">Aucune activité au calendrier.</p>';
+    return;
+  }
+  editor.innerHTML = events.map((event) => `
+    <article class="calendar-event-editor" data-event-id="${esc(event.id)}">
+      <div class="calendar-event-head">
+        <strong>${esc(event.title || 'Nouvelle activité')}</strong>
+        <button class="btn small danger" type="button" data-event-action="delete">Supprimer</button>
+      </div>
+      <div class="calendar-event-fields">
+        <label class="event-title">Nom de l'activité
+          <input data-field="title" maxlength="120" value="${esc(event.title || '')}" placeholder="Ex. Entraînement de courte piste">
+        </label>
+        <label>Date
+          <input data-field="date" type="date" value="${esc(event.date || '')}" required>
+        </label>
+        <label>Début
+          <input data-field="startTime" type="time" value="${esc(event.startTime || '')}">
+        </label>
+        <label>Fin
+          <input data-field="endTime" type="time" value="${esc(event.endTime || '')}">
+        </label>
+        <label>Lieu
+          <input data-field="location" maxlength="160" value="${esc(event.location || '')}" placeholder="Aréna ou adresse">
+        </label>
+        <label>Catégorie
+          <select data-field="category">
+            ${['Entraînement', 'Compétition', 'Activité sociale', 'Autre'].map((category) => `<option${event.category === category ? ' selected' : ''}>${category}</option>`).join('')}
+            ${!['Entraînement', 'Compétition', 'Activité sociale', 'Autre'].includes(event.category) ? `<option selected>${esc(event.category)}</option>` : ''}
+          </select>
+        </label>
+        <label class="event-description">Description
+          <textarea data-field="description" maxlength="1200" rows="2" placeholder="Détails utiles aux membres">${esc(event.description || '')}</textarea>
+        </label>
+      </div>
+    </article>`).join('');
+}
+
+function showAdminSection(name) {
+  $$('[data-admin-section]').forEach((section) => { section.hidden = section.dataset.adminSection !== name; });
+  $$('.admin-section-tab').forEach((button) => {
+    const active = button.dataset.section === name;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function fillGlobal() {
+  const adminTitle = config.adminTitle || 'Administration du viewer';
+  document.title = adminTitle + ' — CPV Cyclones Viewer 2000';
+  $('#adminTitle').textContent = adminTitle;
+  $('#cfgTitle').value = config.siteTitle || '';
+  $('#cfgSubtitle').value = config.siteSubtitle || '';
+  $('#cfgAdminTitle').value = adminTitle;
+  $('#cfgLogoPageTitle').value = config.logoPageTitle || 'Logo — CPV Cyclones Viewer 2000';
+  $('#cfgHint').value = config.hint || '';
+  const c = config.accentColor || '#4d7ea6';
+  $('#cfgAccent').value = /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#4d7ea6';
+  $('#cfgAccentText').value = c;
+}
+
+function setAccentPreview() {
+  const c = config.accentColor || '#4d7ea6';
+  document.body.style.setProperty('--accent', c);
+  document.body.style.setProperty('--primary-bg', c);
+}
+
+let fileMeta = {};
+let checkedFileMeta = new Set();
+let previewObserver = null;
+let probing = false;
+let tabFilterFrame = 0;
+
+function metaLabel(f, val) {
+  let parts = [fmtSize(f.size)];
+  const m = fileMeta[val];
+  if (m && m.w && m.h) parts.unshift(m.w + '×' + m.h);
+  if (m && m.duration > 0.5) {
+    const mbps = (f.size * 8 / m.duration) / 1e6;
+    parts.push((mbps >= 1 ? mbps.toFixed(1) : Math.round(mbps * 1000)) + (mbps >= 1 ? ' Mbit/s' : ' kbit/s'));
+  }
+  return ' (' + parts.join(' · ') + ')';
+}
+
+function videoSrc(name) {
+  return 'videos/' + name.split('/').map(encodeURIComponent).join('/');
+}
+
+function srcOptions(selectedSrc) {
+  let html = '<option value="">— choisir un fichier —</option>';
+  const paths = videoFiles.map((f) => videoSrc(f.name));
+  if (selectedSrc && !paths.includes(selectedSrc)) {
+    html += '<option value="' + esc(selectedSrc) + '" selected>Chemin actuel : ' + esc(selectedSrc) + '</option>';
+  }
+  const groups = new Map();
+  videoFiles.forEach((f) => {
+    const separator = f.name.lastIndexOf('/');
+    const directory = separator < 0 ? '' : f.name.slice(0, separator);
+    if (!groups.has(directory)) groups.set(directory, []);
+    groups.get(directory).push(f);
+  });
+  groups.forEach((files, directory) => {
+    const options = files.map((f) => {
+      const val = videoSrc(f.name);
+      const filename = f.name.slice(f.name.lastIndexOf('/') + 1);
+      const sel = selectedSrc === val ? ' selected' : '';
+      return '<option value="' + esc(val) + '"' + sel + '>' + esc(filename) + metaLabel(f, val) + '</option>';
+    }).join('');
+    if (!directory) {
+      html += options;
+    } else {
+      html += '<optgroup label="' + esc(directory) + '/">' + options + '</optgroup>';
+    }
+  });
+  return html;
+}
+
+function probeOne(f) {
+  return new Promise((resolve) => {
+    const val = videoSrc(f.name);
+    const v = document.createElement('video');
+    let done = false;
+    let timeout;
+    const finish = (meta) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      checkedFileMeta.add(val);
+      if (meta) fileMeta[val] = meta;
+      try { v.removeAttribute('src'); v.load(); } catch (e) {}
+      resolve();
+    };
+    v.preload = 'metadata';
+    v.addEventListener('loadedmetadata', () => finish({ w: v.videoWidth, h: v.videoHeight, duration: Number.isFinite(v.duration) ? v.duration : 0 }), { once: true });
+    v.addEventListener('error', () => finish(null), { once: true });
+    v.src = val;
+    timeout = setTimeout(() => finish(null), 8000);
+  });
+}
+
+async function probeVideoMeta() {
+  if (probing) return;
+  probing = true;
+  const pending = videoFiles.filter((f) => !checkedFileMeta.has(videoSrc(f.name)));
+  let next = 0;
+  const worker = async () => {
+    while (next < pending.length) {
+      const f = pending[next++];
+      await probeOne(f);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(3, pending.length) }, worker));
+    refreshSrcOptions();
+  } finally {
+    probing = false;
+  }
+}
+
+function renderTabs() {
+  if (previewObserver) previewObserver.disconnect();
+  const fragment = document.createDocumentFragment();
+  if (!config.tabs.length) {
+    const p = document.createElement('p');
+    p.className = 'muted-note';
+    p.textContent = 'Aucun onglet. Ajoutez-en un.';
+    fragment.appendChild(p);
+  }
+  config.tabs.forEach((t, i) => fragment.appendChild(buildTabCard(t, i)));
+  tabsEditor.replaceChildren(fragment);
+  $$('.prev', tabsEditor).forEach((preview) => watchPreview(preview));
+  refreshTabOrderControls();
+  updateTabFilter();
+}
+
+function watchPreview(preview) {
+  if (!('IntersectionObserver' in window)) {
+    loadPreview(preview);
+    return;
+  }
+  if (!previewObserver) {
+    previewObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        loadPreview(entry.target);
+        previewObserver.unobserve(entry.target);
+      });
+    }, { rootMargin: '200px 0px' });
+  }
+  previewObserver.observe(preview);
+}
+
+function loadPreview(preview) {
+  const src = preview.dataset.src || '';
+  if (!src) {
+    preview.removeAttribute('src');
+    preview.dataset.loaded = 'false';
+    preview.load();
+    return;
+  }
+  if (preview.getAttribute('src') === src) return;
+  preview.preload = 'metadata';
+  preview.setAttribute('src', src);
+  preview.dataset.loaded = 'true';
+  preview.load();
+}
+
+function updateTabFilter() {
+  const query = $('#tabSearch').value.trim().toLocaleLowerCase();
+  let visible = 0;
+  $$('.tab-card', tabsEditor).forEach((card) => {
+    const searchable = [
+      $('.name', card).value,
+      $('.srcPath', card).value,
+      $('.poster', card).value,
+      $('.folderId option:checked', card)?.textContent || ''
+    ].join(' ').toLocaleLowerCase();
+    const matches = !query || searchable.includes(query);
+    card.hidden = !matches;
+    if (matches) visible += 1;
+  });
+  $('#tabFilterStatus').textContent = query
+    ? visible + ' résultat' + (visible === 1 ? '' : 's') + ' sur ' + config.tabs.length
+    : config.tabs.length + ' onglet' + (config.tabs.length === 1 ? '' : 's');
+}
+
+function scheduleTabFilter() {
+  if (tabFilterFrame) return;
+  tabFilterFrame = requestAnimationFrame(() => {
+    tabFilterFrame = 0;
+    updateTabFilter();
+  });
+}
+
+function refreshTabOrderControls() {
+  const cards = $$('.tab-card', tabsEditor);
+  const firstByFolder = new Map();
+  const lastByFolder = new Map();
+  cards.forEach((card, i) => {
+    const folderId = $('.folderId', card).value;
+    if (!firstByFolder.has(folderId)) firstByFolder.set(folderId, i);
+    lastByFolder.set(folderId, i);
+  });
+  cards.forEach((card, i) => {
+    card.dataset.i = String(i);
+    $('.tnum', card).textContent = String(i + 1);
+    const folderId = $('.folderId', card).value;
+    $('[data-act="tabUp"]', card).disabled = firstByFolder.get(folderId) === i;
+    $('[data-act="tabDown"]', card).disabled = lastByFolder.get(folderId) === i;
+  });
+}
+
+function moveTabCard(card, direction) {
+  const cards = $$('.tab-card', tabsEditor);
+  const index = cards.indexOf(card);
+  const folderId = $('.folderId', card).value;
+  const step = direction < 0 ? -1 : 1;
+  let target = index + step;
+  while (target >= 0 && target < cards.length && $('.folderId', cards[target]).value !== folderId) {
+    target += step;
+  }
+  if (target < 0 || target >= cards.length) return;
+
+  if (step < 0) tabsEditor.insertBefore(card, cards[target]);
+  else tabsEditor.insertBefore(cards[target], card);
+  refreshTabOrderControls();
+  updateTabFilter();
+  setConfigDirty(true);
+}
+
+function folderOptions(selectedId) {
+  let html = '<option value="">Racine</option>';
+  const visit = (folders, parents) => (folders || []).forEach((folder) => {
+    const path = parents.concat(folder.name);
+    html += '<option value="' + esc(folder.id) + '"' + (selectedId === folder.id ? ' selected' : '') + '>' + esc(path.join(' / ')) + '</option>';
+    visit(folder.children, path);
+  });
+  visit(config.folders, []);
+  return html;
+}
+
+function renderFolderTree() {
+  const tree = $('#folderTree');
+  tree.replaceChildren();
+  let total = 0;
+  const count = (folders) => (folders || []).reduce((sum, folder) => sum + 1 + count(folder.children), 0);
+  total = count(config.folders);
+  $('#addRootFolderBtn').disabled = total >= 100;
+
+  const append = (folders, depth) => (folders || []).forEach((folder) => {
+    const row = document.createElement('div');
+    row.className = 'folder-row';
+    row.style.paddingInlineStart = (depth * 20) + 'px';
+    const name = document.createElement('span');
+    name.className = 'folder-name';
+    name.textContent = folder.name;
+    row.appendChild(name);
+    if (depth < 4 && total < 100) {
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'btn small';
+      add.dataset.parentFolder = folder.id;
+      add.textContent = '+ Sous-dossier';
+      row.appendChild(add);
+    }
+    tree.appendChild(row);
+    append(folder.children, depth + 1);
+  });
+  append(config.folders, 0);
+}
+
+function refreshFolderSelectors() {
+  $$('.folderId', tabsEditor).forEach((select) => {
+    refreshFolderSelector(select);
+  });
+}
+
+function refreshFolderSelector(select) {
+  const selected = select.value;
+  select.innerHTML = folderOptions(selected);
+  select.value = selected;
+}
+
+function createFolder(parentId) {
+  const name = prompt(parentId ? 'Nom du sous-dossier :' : 'Nom du dossier :');
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 80) {
+    toast('Le nom doit contenir de 1 à 80 caractères.', 'err');
+    return;
+  }
+  let parent = null;
+  if (parentId) {
+    const find = (folders) => {
+      for (const folder of folders || []) {
+        if (folder.id === parentId) return folder;
+        const nested = find(folder.children);
+        if (nested) return nested;
+      }
+      return null;
+    };
+    parent = find(config.folders);
+    if (!parent) return;
+  }
+  const total = argumentsCount(config.folders);
+  if (total >= 100 || (parent && folderDepth(parentId) >= 4)) {
+    toast('Limite de dossiers atteinte.', 'err');
+    return;
+  }
+  const id = 'folder-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+  const folder = { id, name: trimmed, children: [] };
+  if (parent) parent.children.push(folder);
+  else config.folders.push(folder);
+  renderFolderTree();
+  refreshFolderSelectors();
+  setConfigDirty(true);
+  toast('Dossier créé : ' + trimmed, 'ok');
+}
+
+function argumentsCount(folders) {
+  return (folders || []).reduce((sum, folder) => sum + 1 + argumentsCount(folder.children), 0);
+}
+
+function folderDepth(folderId, folders, depth) {
+  folders = folders || config.folders;
+  depth = depth || 0;
+  for (const folder of folders || []) {
+    if (folder.id === folderId) return depth;
+    const found = folderDepth(folderId, folder.children, depth + 1);
+    if (found >= 0) return found;
+  }
+  return -1;
+}
+
+function buildTabCard(tab, i) {
+  const card = document.createElement('div');
+  card.className = 'tab-card';
+  card.dataset.i = String(i);
+
+  card.innerHTML =
+    '<div class="tab-card-head">' +
+      '<span class="tnum">' + (i + 1) + '</span>' +
+      '<input class="name" value="' + esc(tab.name) + '" placeholder="Nom de la vidéo" maxlength="80">' +
+      '<label class="folder-field">Dossier dans la barre du haut' +
+        '<select class="folderId">' + folderOptions(tab.folderId || '') + '</select>' +
+      '</label>' +
+      '<span class="tab-order-actions" aria-label="Ordre dans la barre du haut">' +
+        '<button class="btn small" data-act="tabUp" type="button" title="Monter dans la barre du haut" aria-label="Monter dans la barre du haut">&#8593;</button>' +
+        '<button class="btn small" data-act="tabDown" type="button" title="Descendre dans la barre du haut" aria-label="Descendre dans la barre du haut">&#8595;</button>' +
+      '</span>' +
+      '<button class="btn small" data-act="toggleTab" type="button" aria-expanded="true">Réduire</button>' +
+      (config.tabs.length > 1 ? '<button class="btn small danger" data-act="delTab" type="button">Supprimer</button>' : '') +
+    '</div>' +
+    '<div class="tab-card-body">' +
+    '<div class="grid2">' +
+      '<div class="src-block">' +
+        '<label>Choisir un fichier envoyé dans videos/ (facultatif)' +
+          '<select class="src">' + srcOptions(tab.src) + '</select>' +
+        '</label>' +
+        '<label>Chemin de la vidéo (relatif à la racine du site)' +
+          '<input class="srcPath" value="' + esc(tab.src) + '" placeholder="provincialuno/mon-fichier.mp4">' +
+        '</label>' +
+        '<label>Poster (image, facultatif)' +
+          '<input class="poster" value="' + esc(tab.poster) + '" placeholder="ex : images/poster.jpg">' +
+        '</label>' +
+      '</div>' +
+      '<div class="preview-box">' +
+        '<video class="prev" controls playsinline preload="metadata"></video>' +
+        '<button class="btn small capture-btn" type="button">&#9200; Ajouter un timecode à l\'instant</button>' +
+      '</div>' +
+    '</div>' +
+    '<h3>Timecodes</h3>' +
+    '<div class="tc-wrap"><table class="tc-table"><thead>' +
+      '<tr><th>Nom</th><th>Temps</th><th>Couleur</th><th style="text-align:right">Ordre</th></tr>' +
+    '</thead><tbody></tbody></table></div>' +
+    '<button class="btn small add-tc" type="button">+ Ajouter un timecode</button>' +
+    '<h3>Qualités vidéo</h3>' +
+    '<p class="muted-note">Versions alternatives de la vidéo (ex : 720p, 480p). Le spectateur pourra les choisir dans les réglages du lecteur.</p>' +
+    '<div class="q-list"></div>' +
+    '<button class="btn small add-q" type="button">+ Ajouter une qualité</button>' +
+    '</div>';
+
+  const qlist = $('.q-list', card);
+  (tab.qualities || []).forEach((q) => qlist.appendChild(buildQualityRow(q)));
+
+  const tbody = $('.tc-table tbody', card);
+  if (tab.timecodes && tab.timecodes.length) {
+    tab.timecodes.forEach((tc) => tbody.appendChild(buildTcRow(card, tc)));
+  } else {
+    tbody.appendChild(emptyRow());
+  }
+
+  const prev = $('.prev', card);
+  prev.preload = 'none';
+  prev.dataset.src = tab.src || '';
+  let previewUpdateTimer;
+  $('.src', card).addEventListener('change', (e) => {
+    $('.srcPath', card).value = e.target.value;
+    prev.dataset.src = e.target.value.trim();
+    loadPreview(prev);
+    probeVideoMeta();
+  });
+  $('.srcPath', card).addEventListener('input', () => {
+    prev.dataset.src = $('.srcPath', card).value.trim();
+    clearTimeout(previewUpdateTimer);
+    previewUpdateTimer = setTimeout(() => {
+      if (card.isConnected) loadPreview(prev);
+    }, 300);
+  });
+  $('.name', card).addEventListener('input', scheduleTabFilter);
+  $('.srcPath', card).addEventListener('input', scheduleTabFilter);
+  $('.folderId', card).addEventListener('change', () => {
+    updateTabFilter();
+    refreshTabOrderControls();
+  });
+  $('.capture-btn', card).addEventListener('click', () => {
+    const d = prev.duration;
+    if (!d || !Number.isFinite(d)) { toast('Chargez d\'abord la vidéo dans l\'aperçu', 'err'); return; }
+    $('.add-tc', card).click();
+    const rows = $$('.tc-time-input', card);
+    if (rows.length) rows[rows.length - 1].value = fmtTime(prev.currentTime);
+    toast('Timecode ajouté à ' + fmtTime(prev.currentTime));
+  });
+
+  $('.add-tc', card).addEventListener('click', () => {
+    const tbody = $('.tc-table tbody', card);
+    const ph = $('.placeholder', tbody);
+    if (ph) ph.remove();
+    tbody.appendChild(buildTcRow(card, { t: 0, label: '', color: '#4d7ea6' }));
+  });
+
+  $('.add-q', card).addEventListener('click', () => {
+    $('.q-list', card).appendChild(buildQualityRow({ name: '', src: '' }));
+  });
+
+  card.addEventListener('click', (e) => {
+    const actBtn = e.target.closest('[data-act]');
+    if (!actBtn) return;
+    const act = actBtn.dataset.act;
+    if (act === 'toggleTab') {
+      const collapsed = card.classList.toggle('collapsed');
+      actBtn.textContent = collapsed ? 'Développer' : 'Réduire';
+      actBtn.setAttribute('aria-expanded', String(!collapsed));
+      return;
+    }
+    if (act === 'tabUp' || act === 'tabDown') {
+      moveTabCard(card, act === 'tabUp' ? -1 : 1);
+      return;
+    }
+    if (act === 'delTab') {
+      if (!confirm('Supprimer cet onglet ?')) return;
+      const index = $$('.tab-card', tabsEditor).indexOf(card);
+      try { readAllFromDom(); } catch (e) {}
+      config.tabs.splice(index, 1);
+      renderTabs();
+      toast('Onglet supprimé.');
+    }
+    if (act === 'qdel') {
+      const row = actBtn.closest('.q-row');
+      if (row) row.remove();
+      return;
+    }
+    if (act === 'del' || act === 'up' || act === 'down') {
+      const tr = actBtn.closest('tr');
+      const tbody = tr.parentNode;
+      const rows = Array.from(tbody.children);
+      const idx = rows.indexOf(tr);
+      if (act === 'del') {
+        rows[idx].remove();
+        if (!tbody.children.length) tbody.appendChild(emptyRow());
+      } else if (act === 'up' && idx > 0) {
+        tbody.insertBefore(rows[idx], rows[idx - 1]);
+      } else if (act === 'down' && idx < rows.length - 1) {
+        tbody.insertBefore(rows[idx + 1], rows[idx]);
+      }
+    }
+  });
+
+  return card;
+}
+
+function emptyRow() {
+  const tr = document.createElement('tr');
+  tr.className = 'placeholder';
+  tr.innerHTML = '<td colspan="4">Aucun timecode. Cliquez sur « Ajouter un timecode ».</td>';
+  return tr;
+}
+
+function buildTcRow(card, tc) {
+  const color = tc.color && /^#[0-9a-fA-F]{6}$/.test(tc.color) ? tc.color : '#4d7ea6';
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td><input class="tc-label-input" value="' + esc(tc.label || '') + '" placeholder="Nom du timecode" maxlength="120"></td>' +
+    '<td><input class="tc-time-input" value="' + esc(fmtTime(tc.t)) + '" placeholder="0:00"></td>' +
+    '<td><input class="tc-color-input" type="color" value="' + color + '" title="Couleur du marqueur"></td>' +
+    '<td><span class="row-actions">' +
+      '<button class="btn small" data-act="up" type="button" title="Monter" aria-label="Monter">&#8593;</button>' +
+      '<button class="btn small" data-act="down" type="button" title="Descendre" aria-label="Descendre">&#8595;</button>' +
+      '<button class="btn small danger" data-act="del" type="button" title="Supprimer" aria-label="Supprimer">&#10005;</button>' +
+    '</span></td>';
+  return tr;
+}
+
+function buildQualityRow(q) {
+  const row = document.createElement('div');
+  row.className = 'q-row';
+  row.innerHTML =
+    '<label class="q-name-label">Nom de la qualité' +
+      '<input class="q-name" value="' + esc(q.name || '') + '" placeholder="ex : 720p" maxlength="40">' +
+    '</label>' +
+    '<label class="q-src-label">Fichier' +
+      '<select class="qsrc">' + srcOptions(q.src) + '</select>' +
+    '</label>' +
+    '<label class="q-path-label">Chemin (relatif à la racine)' +
+      '<input class="qPath" value="' + esc(q.src || '') + '" placeholder="videos/ma-video-720p.mp4">' +
+    '</label>' +
+    '<label class="q-auto"><input type="checkbox" class="q-auto-cb"' + (q.auto ? ' checked' : '') + '> Auto (au démarrage)</label>' +
+    '<span class="row-actions q-actions">' +
+      '<button class="btn small danger" data-act="qdel" type="button" title="Supprimer la qualité" aria-label="Supprimer la qualité">&#10005;</button>' +
+    '</span>';
+
+  const sel = $('.qsrc', row);
+  const pathInput = $('.qPath', row);
+  sel.addEventListener('change', () => {
+    if (sel.value) pathInput.value = sel.value;
+    probeVideoMeta();
+  });
+  const cb = $('.q-auto-cb', row);
+  cb.addEventListener('change', () => {
+    if (cb.checked) {
+      const cardEl = row.closest('.tab-card');
+      if (cardEl) $$('.q-auto-cb', cardEl).forEach((c) => { if (c !== cb) c.checked = false; });
+    }
+  });
+  return row;
+}
+
+/* ---------- video files ---------- */
+
+function renderVideoList() {
+  const ul = $('#videoList');
+  ul.innerHTML = '';
+  if (!videoFiles.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'Aucun fichier dans videos/. Les vidéos d’autres dossiers du serveur restent accessibles par leur chemin configuré.';
+    ul.appendChild(li);
+    return;
+  }
+  videoFiles.forEach((f) => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'fname';
+    name.textContent = f.name;
+    const size = document.createElement('span');
+    size.className = 'fsize';
+    size.textContent = fmtSize(f.size);
+    const use = document.createElement('button');
+    use.className = 'btn small';
+    use.type = 'button';
+    use.textContent = 'Utiliser';
+    use.title = 'Affecter ce fichier au premier onglet sans vidéo';
+    use.dataset.video = f.name;
+    const del = document.createElement('button');
+    del.className = 'btn small danger';
+    del.type = 'button';
+    del.textContent = 'Supprimer';
+    del.dataset.video = f.name;
+    li.appendChild(name);
+    li.appendChild(size);
+    li.appendChild(use);
+    li.appendChild(del);
+    ul.appendChild(li);
+  });
+}
+
+function fmtSize(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' Go';
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' Mo';
+  if (b >= 1024) return (b / 1024).toFixed(0) + ' Ko';
+  return b + ' o';
+}
+
+function bindVideoList() {
+  $('#uploadInput').addEventListener('change', uploadVideo);
+
+  $('#videoList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-video]');
+    if (!btn) return;
+    const name = btn.dataset.video;
+    if (btn.textContent === 'Supprimer') {
+      if (!confirm('Supprimer définitivement le fichier ' + name + ' ?')) return;
+      try {
+        await api('/api/video?name=' + encodeURIComponent(name), { method: 'DELETE' });
+        recordAction('Vidéo supprimée : ' + name, 'warn');
+        toast('Fichier supprimé : ' + name, 'ok');
+        await refreshVideos();
+      } catch (err) {
+        toast('Erreur : ' + err.message, 'err');
+      }
+      return;
+    }
+    if (btn.textContent === 'Utiliser') {
+      const src = videoSrc(name);
+      const target = config.tabs.find((t) => !t.src || t.src === src) || config.tabs[0];
+      target.src = src;
+      const card = tabsEditor.querySelector('.tab-card[data-i="' + config.tabs.indexOf(target) + '"]');
+      if (card) {
+        $('.srcPath', card).value = target.src;
+        $('.src', card).value = target.src;
+      }
+      setConfigDirty(true);
+      toast('Vidéo affectée à l\'onglet « ' + target.name + ' »', 'ok');
+    }
+  });
+}
+
+function uploadVideo() {
+  const input = $('#uploadInput');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!/\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi)$/i.test(file.name)) {
+    toast('Format non supporté : ' + file.name, 'err');
+    input.value = '';
+    return;
+  }
+  const prog = $('#uploadProg');
+  const msg = $('#uploadMsg');
+  prog.hidden = false;
+  prog.value = 0;
+  msg.textContent = 'Upload en cours…';
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
+  xhr.setRequestHeader('x-admin-pass', pass);
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = (e) => { if (e.lengthComputable) prog.value = (e.loaded / e.total) * 100; };
+  xhr.onload = async () => {
+    prog.hidden = true;
+    msg.textContent = '';
+    let data = null;
+    try { data = JSON.parse(xhr.responseText); } catch (e) {}
+    if (xhr.status >= 200 && xhr.status < 300 && data && data.ok) {
+      recordAction('Vidéo uploadée : ' + file.name, 'ok');
+      toast('Vidéo uploadée : ' + file.name, 'ok');
+      input.value = '';
+      await refreshVideos();
+    } else {
+      toast('Échec de l\'upload : ' + ((data && data.error) || xhr.status), 'err');
+      input.value = '';
+    }
+  };
+  xhr.onerror = () => {
+    prog.hidden = true;
+    msg.textContent = '';
+    toast('Erreur réseau pendant l\'upload', 'err');
+  };
+  xhr.send(file);
+}
+
+async function refreshVideos() {
+  try {
+    const vid = await api('/api/videos');
+    videoFiles = vid.videos || [];
+    renderVideoList();
+    refreshSrcOptions();
+  } catch (e) { /* silence */ }
+}
+
+function refreshSrcOptions() {
+  $$('.src, .qsrc', tabsEditor).forEach((sel) => {
+    const current = sel.value;
+    sel.innerHTML = srcOptions(current);
+    sel.value = current;
+  });
+}
+
+/* ---------- global fields ---------- */
+
+function mergeDiscoveredFolders(existingFolders, videoPaths) {
+  const base = Array.isArray(existingFolders) ? existingFolders : DEFAULT_FOLDERS;
+  const folders = JSON.parse(JSON.stringify(base));
+  const discover = (path) => {
+    const relative = path.replace(/^\/+/, '').replace(/\\/g, '/');
+    if (!relative) return;
+    const parts = relative.split('/').filter(Boolean);
+    const name = parts.slice(0, -1).filter(Boolean);
+    if (!name.length) return;
+    let root = folders;
+    name.forEach((segment, idx) => {
+      const normalized = segment.trim();
+      if (!normalized) return;
+      let node = root.find((folder) => folder.name === normalized);
+      if (!node) {
+        node = { id: 'auto-folder-' + normalized + '-' + idx + '-' + Date.now().toString(36), name: normalized, children: [] };
+        root.push(node);
+      }
+      root = node.children;
+    });
+  };
+  videoPaths.forEach((path) => {
+    const fileName = path.split('/').pop();
+    if (!fileName) return;
+    const dir = path.split('/').slice(0, -1).join('/');
+    if (dir) discover(dir);
+  });
+  return folders;
+}
+
+function readMonitorSnapshot() {
+  return {
+    recent: Array.isArray(readLocalJSON(RECENT_KEY, [])) ? readLocalJSON(RECENT_KEY, []) : [],
+    errors: Array.isArray(readLocalJSON(VIDEO_ERROR_KEY, [])) ? readLocalJSON(VIDEO_ERROR_KEY, []) : [],
+    actions: Array.isArray(readLocalJSON(ACTION_LOG_KEY, [])) ? readLocalJSON(ACTION_LOG_KEY, []) : []
+  };
+}
+
+async function refreshMonitor() {
+  const monitor = $('#monitorStatus');
+  const pingEl = $('#monitorPing');
+  const diskEl = $('#monitorDisk');
+  const videosEl = $('#monitorVideoCount');
+  const recentEl = $('#monitorRecent');
+  const errorsEl = $('#monitorVideoErrors');
+  const actionsEl = $('#monitorActions');
+  if (!monitor || !pingEl || !diskEl || !videosEl || !recentEl || !errorsEl || !actionsEl) return;
+
+  const started = performance.now();
+  try {
+    const data = await api('/api/monitor', { cache: 'no-store' });
+    const ping = Math.round(performance.now() - started);
+    pingEl.textContent = ping + ' ms';
+    const total = Number(data.disk && data.disk.total) || 0;
+    const free = Number(data.disk && data.disk.free) || 0;
+    const used = total ? ((total - free) / total) * 100 : 0;
+    diskEl.textContent = formatBytes(free) + ' libre / ' + Math.round(used) + '% utilisé';
+    videosEl.textContent = String(data.videos && data.videos.count ? data.videos.count : 0) + ' vidéos';
+    monitor.textContent = 'OK';
+  } catch (e) {
+    pingEl.textContent = '—';
+    diskEl.textContent = 'Indisponible';
+    videosEl.textContent = '—';
+    monitor.textContent = 'Erreur';
+  }
+
+  const snapshot = readMonitorSnapshot();
+  const recent = snapshot.recent.slice(0, 5);
+  recentEl.innerHTML = recent.length
+    ? recent.map((item) => '<li><span>' + esc(item.title || 'Vidéo') + '</span><small>' + esc(Math.max(0, Math.round((item.position || 0) / 60)) + ' min') + '</small></li>').join('')
+    : '<li class="empty-monitor">Aucune vidéo visionnée récemment.</li>';
+
+  const errors = snapshot.errors.slice(0, 5);
+  errorsEl.innerHTML = errors.length
+    ? errors.map((item) => '<li><span>' + esc(item.message || 'Erreur') + '</span><small>' + esc(new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) + '</small></li>').join('')
+    : '<li class="empty-monitor">Aucune erreur de lecture enregistrée.</li>';
+
+  const actions = snapshot.actions.slice(0, 5);
+  actionsEl.innerHTML = actions.length
+    ? actions.map((entry) => '<li><span>' + esc(entry.label || 'Action') + '</span><small>' + esc(new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) + '</small></li>').join('')
+    : '<li class="empty-monitor">Aucun journal d’actions.</li>';
+}
+
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value <= 0) return '0 o';
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+  return size.toFixed(size >= 10 || unit === 0 ? 0 : 1) + ' ' + units[unit];
+}
+
+function bindGlobals() {
+  const markEdited = (e) => {
+    const target = e.target;
+    if (tabsEditor.contains(target) || $('#calendarEditor').contains(target) || target.matches('#cfgTitle, #cfgSubtitle, #cfgAdminTitle, #cfgLogoPageTitle, #cfgAccent, #cfgAccentText, #cfgHint')) {
+      setConfigDirty(true);
+    }
+  };
+  appEl.addEventListener('input', markEdited);
+  appEl.addEventListener('change', markEdited);
+  tabsEditor.addEventListener('focusin', (e) => {
+    if (e.target.matches('.folderId')) refreshFolderSelector(e.target);
+  });
+  tabsEditor.addEventListener('click', (e) => {
+    if (e.target.closest('.add-tc, .add-q, [data-act]:not([data-act="toggleTab"])')) setConfigDirty(true);
+  });
+
+  const syncAccent = () => {
+    const c = $('#cfgAccentText').value.trim();
+    config.accentColor = c;
+    if (/^#[0-9a-fA-F]{6}$/.test(c)) $('#cfgAccent').value = c;
+    document.body.style.setProperty('--accent', c);
+  };
+  $('#cfgAccent').addEventListener('input', (e) => {
+    $('#cfgAccentText').value = e.target.value;
+    syncAccent();
+  });
+  $('#cfgAccentText').addEventListener('input', syncAccent);
+
+  $('#addTabBtn').addEventListener('click', () => {
+    try { readAllFromDom(); } catch (e) {}
+    config.tabs.push({ name: 'Vidéo ' + (config.tabs.length + 1), src: '', poster: '', folderId: '', qualities: [], timecodes: [{ t: 0, label: 'Début' }] });
+    renderTabs();
+    setConfigDirty(true);
+  });
+  $('#tabSearch').addEventListener('input', scheduleTabFilter);
+  $('#collapseTabsBtn').addEventListener('click', () => {
+    $$('.tab-card:not([hidden])', tabsEditor).forEach((card) => {
+      card.classList.add('collapsed');
+      const button = $('[data-act="toggleTab"]', card);
+      button.textContent = 'Développer';
+      button.setAttribute('aria-expanded', 'false');
+    });
+  });
+  $('#expandTabsBtn').addEventListener('click', () => {
+    $$('.tab-card:not([hidden])', tabsEditor).forEach((card) => {
+      card.classList.remove('collapsed');
+      const button = $('[data-act="toggleTab"]', card);
+      button.textContent = 'Réduire';
+      button.setAttribute('aria-expanded', 'true');
+    });
+  });
+
+  $('#addRootFolderBtn').addEventListener('click', () => createFolder(''));
+  $('#folderTree').addEventListener('click', (e) => {
+    const button = e.target.closest('button[data-parent-folder]');
+    if (button) createFolder(button.dataset.parentFolder);
+  });
+
+  $('#saveBtn').addEventListener('click', saveConfig);
+  $('#exportBtn').addEventListener('click', exportConfig);
+  $('#importInput').addEventListener('change', importConfig);
+  $('#pwBtn').addEventListener('click', changePassword);
+  $('#refreshMonitorBtn').addEventListener('click', refreshMonitor);
+  $$('.admin-section-tab').forEach((button) => button.addEventListener('click', () => showAdminSection(button.dataset.section)));
+  $('#addEventBtn').addEventListener('click', () => {
+    if (!Array.isArray(config.calendar)) config.calendar = [];
+    config.calendar.push({ id: 'event-' + Date.now().toString(36), title: '', date: '', startTime: '', endTime: '', location: '', category: 'Entraînement', description: '' });
+    renderCalendarEditor();
+    setConfigDirty(true);
+    const input = $('#calendarEditor [data-field="title"]');
+    if (input) input.focus();
+  });
+  $('#calendarEditor').addEventListener('click', (e) => {
+    const button = e.target.closest('[data-event-action="delete"]');
+    if (!button) return;
+    const card = button.closest('[data-event-id]');
+    config.calendar = config.calendar.filter((event) => event.id !== card.dataset.eventId);
+    renderCalendarEditor();
+    setConfigDirty(true);
+  });
+}
+
+/* ---------- save / export / import ---------- */
+
+function readAllFromDom() {
+  config.siteTitle = $('#cfgTitle').value.trim() || 'CPV Cyclones Sport';
+  config.siteSubtitle = $('#cfgSubtitle').value.trim() || 'Étude Vidéo Viewer 2000';
+  config.adminTitle = $('#cfgAdminTitle').value.trim() || 'Administration du viewer';
+  config.logoPageTitle = $('#cfgLogoPageTitle').value.trim() || 'Logo — CPV Cyclones Viewer 2000';
+  config.accentColor = $('#cfgAccentText').value.trim() || '#4d7ea6';
+  config.hint = $('#cfgHint').value.trim();
+
+  const calendar = [];
+  let calendarHasError = false;
+  $$('.calendar-event-editor', $('#calendarEditor')).forEach((card) => {
+    const field = (name) => $(`[data-field="${name}"]`, card);
+    const title = field('title').value.trim();
+    const date = field('date').value;
+    if (!title || !date) {
+      calendarHasError = true;
+      field(!title ? 'title' : 'date').classList.add('err');
+    } else {
+      field('title').classList.remove('err');
+      field('date').classList.remove('err');
+    }
+    calendar.push({
+      id: card.dataset.eventId,
+      title,
+      date,
+      startTime: field('startTime').value,
+      endTime: field('endTime').value,
+      location: field('location').value.trim(),
+      category: field('category').value,
+      description: field('description').value.trim()
+    });
+  });
+  if (calendarHasError) {
+    showAdminSection('calendar');
+    toast('Chaque activité doit avoir un nom et une date.', 'err');
+    return false;
+  }
+  config.calendar = calendar;
+
+  const tabs = [];
+  let hasError = false;
+  $$('.tab-card', tabsEditor).forEach((card) => {
+    let autoFound = false;
+    const name = $('.name', card).value.trim() || 'Vidéo';
+    const src = $('.srcPath', card).value.trim();
+    const poster = $('.poster', card).value.trim();
+    const folderId = $('.folderId', card).value;
+    const timecodes = [];
+    $$('.tc-table tbody tr', card).forEach((tr) => {
+      if (tr.classList.contains('placeholder')) return;
+      const label = $('.tc-label-input', tr).value.trim() || 'Timecode';
+      const timeStr = $('.tc-time-input', tr).value.trim();
+      const color = $('.tc-color-input', tr).value;
+      const t = parseTime(timeStr);
+      if (!Number.isFinite(t)) {
+        hasError = true;
+        $('.tc-time-input', tr).classList.add('err');
+      } else {
+        $('.tc-time-input', tr).classList.remove('err');
+      }
+      timecodes.push({ t: Number.isFinite(t) ? t : 0, label, color });
+    });
+    const qualities = [];
+    $$('.q-row', card).forEach((row, qi) => {
+      const qname = $('.q-name', row).value.trim() || 'Qualité ' + (qi + 1);
+      const qsrc = $('.qPath', row).value.trim();
+      if (!qsrc) return;
+      let isAuto = $('.q-auto-cb', row)?.checked || false;
+      if (isAuto && autoFound) isAuto = false;
+      if (isAuto) autoFound = true;
+      qualities.push({ name: qname, src: qsrc, auto: isAuto });
+    });
+    tabs.push({ name, src, poster, folderId, qualities, timecodes });
+  });
+  config.tabs = tabs;
+  return !hasError;
+}
+
+async function saveConfig() {
+  if (!readAllFromDom()) {
+    toast('Certains timecodes ont un temps invalide (champs en rouge).', 'err');
+    return;
+  }
+  const btn = $('#saveBtn');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+    config = res.config;
+    render();
+    setConfigDirty(false);
+    recordAction('Configuration enregistrée', 'ok');
+    toast('Configuration enregistrée avec succès.', 'ok');
+  } catch (e) {
+    toast('Erreur d\'enregistrement : ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function exportConfig() {
+  const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cpv-config.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importConfig(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || typeof data !== 'object' || !Array.isArray(data.tabs)) throw new Error('Structure invalide');
+      config = {
+        siteTitle: data.siteTitle || 'CPV Cyclones Sport',
+        siteSubtitle: data.siteSubtitle || 'Étude Vidéo Viewer 2000',
+        adminTitle: data.adminTitle || 'Administration du viewer',
+        logoPageTitle: data.logoPageTitle || 'Logo — CPV Cyclones Viewer 2000',
+        accentColor: data.accentColor || '#4d7ea6',
+        hint: data.hint || '',
+        folders: Array.isArray(data.folders) ? data.folders : DEFAULT_FOLDERS.map((folder) => ({ ...folder, children: [] })),
+        tabs: data.tabs
+      };
+      render();
+      setConfigDirty(true);
+      toast('Configuration importée. Pensez à l\'enregistrer.', 'ok');
+    } catch (err) {
+      toast('Fichier JSON invalide : ' + err.message, 'err');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+async function changePassword() {
+  const cur = prompt('Mot de passe actuel :');
+  if (cur === null) return;
+  const n1 = prompt('Nouveau mot de passe (6 caractères min.) :');
+  if (n1 === null) return;
+  const n2 = prompt('Confirmez le nouveau mot de passe :');
+  if (n1 !== n2) { toast('Les mots de passe ne correspondent pas.', 'err'); return; }
+  if (n1.length < 6) { toast('Le mot de passe doit faire au moins 6 caractères.', 'err'); return; }
+  try {
+    await api('/api/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: cur, newPassword: n1 })
+    });
+    pass = n1;
+    toast('Mot de passe modifié.', 'ok');
+  } catch (err) {
+    toast('Erreur : ' + err.message, 'err');
+  }
+}
+
+/* ---------- boot ---------- */
+
+bindVideoList();
+init();
