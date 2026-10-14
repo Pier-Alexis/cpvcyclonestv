@@ -12,6 +12,7 @@ const tabsEditor = $('#tabsEditor');
 let pass = '';
 let config = null;
 let videoFiles = [];
+let athletes = [];
 const ACTION_LOG_KEY = 'cpvViewer:actions';
 const VIDEO_ERROR_KEY = 'cpvViewer:videoErrors';
 const RECENT_KEY = 'cpvViewer:recent';
@@ -167,12 +168,14 @@ async function showApp() {
   loginEl.hidden = true;
   appEl.hidden = false;
   try {
-    const [cfg, vid] = await Promise.all([
+    const [cfg, vid, athleteData] = await Promise.all([
       api('/api/config'),
-      api('/api/videos').catch(() => ({ videos: [] }))
+      api('/api/videos').catch(() => ({ videos: [] })),
+      api('/api/athletes')
     ]);
     config = cfg;
     videoFiles = vid.videos || [];
+    athletes = athleteData.athletes || [];
     config.folders = mergeDiscoveredFolders(config.folders || DEFAULT_FOLDERS, videoFiles.map((file) => file.name));
     render();
     setConfigDirty(false);
@@ -189,6 +192,7 @@ function render() {
   renderFolderTree();
   renderTabs();
   renderVideoList();
+  renderAthletes();
   setAccentPreview();
   renderActionLog();
 }
@@ -233,6 +237,70 @@ function renderCalendarEditor() {
         </label>
       </div>
     </article>`).join('');
+}
+
+function renderAthletes() {
+    const editor = $('#athleteEditor');
+    $('#athleteSummary').textContent = athletes.length + ' fiche' + (athletes.length === 1 ? '' : 's') + ' privée' + (athletes.length === 1 ? '' : 's');
+    if (!athletes.length) {
+      editor.innerHTML = '<p class="muted-note">Aucune fiche pour le moment. Ajoutez un athlète pour créer un accès privé.</p>';
+      return;
+    }
+    editor.innerHTML = athletes.map((athlete) => `
+      <article class="athlete-card" data-athlete-card data-id="${esc(athlete.id)}">
+        <div class="athlete-card-head">
+          <strong>${esc(athlete.name || 'Nouvel athlète')}</strong>
+          <div class="athlete-actions">
+            ${athlete.hasPassword ? `<a class="btn small" href="/athlete.html?id=${encodeURIComponent(athlete.id)}" target="_blank" rel="noopener">Ouvrir la fiche</a>` : ''}
+            <button class="btn small primary" type="button" data-athlete-action="save">Enregistrer la fiche</button>
+            <button class="btn small danger" type="button" data-athlete-action="delete">Supprimer</button>
+          </div>
+        </div>
+        <div class="athlete-card-body">
+          <div class="grid2">
+            <label>Nom complet<input data-field="name" maxlength="100" value="${esc(athlete.name || '')}" required></label>
+            <label>Discipline<input data-field="discipline" maxlength="100" value="${esc(athlete.discipline || '')}" placeholder="Courte piste, longue piste…"></label>
+            <label>Catégorie<input data-field="category" maxlength="80" value="${esc(athlete.category || '')}" placeholder="Junior, sénior…"></label>
+            <label>${athlete.hasPassword ? 'Nouveau mot de passe (facultatif)' : 'Mot de passe initial'}
+              <input data-field="password" type="password" minlength="8" autocomplete="new-password" placeholder="${athlete.hasPassword ? 'Laisser vide pour conserver le mot de passe' : '8 caractères minimum'}" ${athlete.hasPassword ? '' : 'required'}>
+            </label>
+            <label class="event-description">Présentation<textarea data-field="bio" maxlength="2000" rows="3" placeholder="Courte présentation">${esc(athlete.bio || '')}</textarea></label>
+          </div>
+          ${athlete.hasPassword ? `<div class="athlete-link"><label>Lien privé<input readonly value="${esc(location.origin + '/athlete.html?id=' + encodeURIComponent(athlete.id))}"></label><button class="btn small" type="button" data-athlete-action="copy-link">Copier le lien</button></div>` : ''}
+          <section>
+            <h3>Meilleurs temps personnels</h3>
+            <div class="athlete-entry-list" data-entry-list="records">${(athlete.records || []).map((record) => athleteRecordMarkup(record)).join('')}</div>
+            <button class="btn small" type="button" data-athlete-action="add-record">+ Ajouter un temps</button>
+          </section>
+          <section>
+            <h3>Entraînements</h3>
+            <div class="athlete-entry-list" data-entry-list="trainings">${(athlete.trainings || []).map((training) => athleteTrainingMarkup(training)).join('')}</div>
+            <button class="btn small" type="button" data-athlete-action="add-training">+ Ajouter un entraînement</button>
+          </section>
+        </div>
+      </article>`).join('');
+}
+
+function athleteRecordMarkup(record) {
+    return `<div class="athlete-record-row" data-entry-id="${esc(record.id || '')}">
+      <label>Distance<input data-field="distance" maxlength="60" value="${esc(record.distance || '')}" placeholder="500 m"></label>
+      <label>Temps<input data-field="time" maxlength="40" value="${esc(record.time || '')}" placeholder="45,32"></label>
+      <label>Date<input data-field="date" type="date" value="${esc(record.date || '')}"></label>
+      <label>Compétition<input data-field="competition" maxlength="120" value="${esc(record.competition || '')}"></label>
+      <label>Notes<input data-field="notes" maxlength="500" value="${esc(record.notes || '')}"></label>
+      <button class="btn small danger" type="button" data-entry-action="delete" aria-label="Supprimer ce temps">×</button>
+    </div>`;
+}
+
+function athleteTrainingMarkup(training) {
+    return `<div class="athlete-training-row" data-entry-id="${esc(training.id || '')}">
+      <label>Date<input data-field="date" type="date" value="${esc(training.date || '')}"></label>
+      <label>Type<input data-field="type" maxlength="100" value="${esc(training.type || '')}" placeholder="Glace, musculation…"></label>
+      <label>Durée (min)<input data-field="duration" type="number" min="0" step="1" value="${esc(training.duration || '')}"></label>
+      <label>Lieu<input data-field="location" maxlength="120" value="${esc(training.location || '')}"></label>
+      <label>Notes<input data-field="notes" maxlength="1200" value="${esc(training.notes || '')}"></label>
+      <button class="btn small danger" type="button" data-entry-action="delete" aria-label="Supprimer cet entraînement">×</button>
+    </div>`;
 }
 
 function showAdminSection(name) {
@@ -780,15 +848,38 @@ function buildQualityRow(q) {
 function renderVideoList() {
   const ul = $('#videoList');
   ul.innerHTML = '';
-  if (!videoFiles.length) {
+  const query = ($('#fileSearch')?.value || '').trim().toLocaleLowerCase();
+  const dateFilter = $('#fileDate')?.value || '';
+  const order = $('#fileSort')?.value || 'newest';
+  const files = videoFiles.filter((file) => {
+    if (query && !file.name.toLocaleLowerCase().includes(query)) return false;
+    if (!dateFilter) return true;
+    const date = new Date(file.mtime);
+    const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+    return key === dateFilter;
+  }).slice();
+  files.sort((a, b) => {
+    if (order === 'name') return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+    if (order === 'oldest') return a.mtime - b.mtime;
+    if (order === 'largest') return b.size - a.size;
+    return b.mtime - a.mtime;
+  });
+  if (!videoFiles.length || !files.length) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'Aucun fichier dans videos/. Les vidéos d’autres dossiers du serveur restent accessibles par leur chemin configuré.';
+    li.textContent = videoFiles.length
+      ? 'Aucun fichier ne correspond à cette recherche.'
+      : 'Aucun fichier dans videos/. Les vidéos d’autres dossiers du serveur restent accessibles par leur chemin configuré.';
     ul.appendChild(li);
-    return;
   }
-  videoFiles.forEach((f) => {
+  files.forEach((f) => {
     const li = document.createElement('li');
+    const checkboxLabel = document.createElement('label');
+    checkboxLabel.className = 'file-check';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.selectVideo = f.name;
+    checkboxLabel.appendChild(checkbox);
     const name = document.createElement('span');
     name.className = 'fname';
     name.textContent = f.name;
@@ -800,18 +891,68 @@ function renderVideoList() {
     use.type = 'button';
     use.textContent = 'Utiliser';
     use.title = 'Affecter ce fichier au premier onglet sans vidéo';
+    use.dataset.videoAction = 'use';
     use.dataset.video = f.name;
+    const rename = document.createElement('button');
+    rename.className = 'btn small';
+    rename.type = 'button';
+    rename.textContent = 'Renommer';
+    rename.dataset.videoAction = 'rename';
+    rename.dataset.video = f.name;
+    const move = document.createElement('button');
+    move.className = 'btn small';
+    move.type = 'button';
+    move.textContent = 'Déplacer';
+    move.dataset.videoAction = 'move';
+    move.dataset.video = f.name;
     const del = document.createElement('button');
     del.className = 'btn small danger';
     del.type = 'button';
     del.textContent = 'Supprimer';
+    del.dataset.videoAction = 'delete';
     del.dataset.video = f.name;
+    li.appendChild(checkboxLabel);
     li.appendChild(name);
     li.appendChild(size);
     li.appendChild(use);
+    li.appendChild(rename);
+    li.appendChild(move);
     li.appendChild(del);
     ul.appendChild(li);
   });
+  updateVideoSelection();
+  renderVideoDestinationOptions();
+}
+
+function renderVideoDestinationOptions() {
+  const select = $('#fileDestination');
+  if (!select) return;
+  const current = select.value;
+  const directories = new Set();
+  videoFiles.forEach((file) => {
+    const parts = file.name.split('/');
+    parts.pop();
+    for (let index = 1; index <= parts.length; index += 1) directories.add(parts.slice(0, index).join('/'));
+  });
+  select.innerHTML = '<option value="">Racine de videos/</option>' + Array.from(directories).sort().map((directory) =>
+    `<option value="${esc(directory)}">${esc(directory)}</option>`
+  ).join('');
+  if (directories.has(current)) select.value = current;
+}
+
+function selectedVideoNames() {
+  return $$('[data-select-video]:checked', $('#videoList')).map((checkbox) => checkbox.dataset.selectVideo);
+}
+
+function updateVideoSelection() {
+  const selected = selectedVideoNames();
+  const visible = $$('[data-select-video]', $('#videoList'));
+  $('#fileSelectionStatus').textContent = selected.length ? selected.length + ' sélectionné' + (selected.length === 1 ? '' : 's') : videoFiles.length + ' fichier' + (videoFiles.length === 1 ? '' : 's');
+  $('#moveSelectedBtn').disabled = !selected.length;
+  $('#deleteSelectedBtn').disabled = !selected.length;
+  const selectAll = $('#selectAllFiles');
+  selectAll.checked = visible.length > 0 && visible.every((checkbox) => checkbox.checked);
+  selectAll.indeterminate = selected.length > 0 && !selectAll.checked;
 }
 
 function fmtSize(b) {
@@ -822,13 +963,34 @@ function fmtSize(b) {
 }
 
 function bindVideoList() {
-  $('#uploadInput').addEventListener('change', uploadVideo);
+  $('#uploadInput').addEventListener('change', () => uploadVideo());
+  const dropzone = $('#videoDropzone');
+  dropzone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropzone.classList.add('dragover');
+  });
+  dropzone.addEventListener('dragleave', (event) => {
+    if (!dropzone.contains(event.relatedTarget)) dropzone.classList.remove('dragover');
+  });
+  dropzone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropzone.classList.remove('dragover');
+    if (event.dataTransfer && event.dataTransfer.files.length) uploadVideo(event.dataTransfer.files);
+  });
+  $('#fileSearch').addEventListener('input', renderVideoList);
+  $('#fileDate').addEventListener('change', renderVideoList);
+  $('#fileSort').addEventListener('change', renderVideoList);
+  $('#selectAllFiles').addEventListener('change', (event) => {
+    $$('[data-select-video]', $('#videoList')).forEach((checkbox) => { checkbox.checked = event.target.checked; });
+    updateVideoSelection();
+  });
+  $('#videoList').addEventListener('change', updateVideoSelection);
 
   $('#videoList').addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-video]');
+    const btn = e.target.closest('button[data-video-action]');
     if (!btn) return;
     const name = btn.dataset.video;
-    if (btn.textContent === 'Supprimer') {
+    if (btn.dataset.videoAction === 'delete') {
       if (!confirm('Supprimer définitivement le fichier ' + name + ' ?')) return;
       try {
         await api('/api/video?name=' + encodeURIComponent(name), { method: 'DELETE' });
@@ -840,9 +1002,35 @@ function bindVideoList() {
       }
       return;
     }
-    if (btn.textContent === 'Utiliser') {
+    if (btn.dataset.videoAction === 'rename') {
+      const oldBase = name.split('/').pop();
+      const oldExt = oldBase.includes('.') ? oldBase.slice(oldBase.lastIndexOf('.')) : '';
+      const entered = prompt('Nouveau nom du fichier :', oldBase);
+      if (entered === null) return;
+      const base = entered.trim();
+      if (!base || /[\\/]/.test(base)) {
+        toast('Entrez uniquement un nom de fichier, sans chemin.', 'err');
+        return;
+      }
+      const newBase = oldExt && !base.toLowerCase().endsWith(oldExt.toLowerCase()) ? base + oldExt : base;
+      const directory = name.includes('/') ? name.slice(0, name.lastIndexOf('/') + 1) : '';
+      await moveVideo(name, directory + newBase, 'Vidéo renommée.');
+      return;
+    }
+    if (btn.dataset.videoAction === 'move') {
+      const folder = $('#fileDestination').value;
+      const base = name.split('/').pop();
+      const destination = folder ? folder + '/' + base : base;
+      await moveVideo(name, destination, 'Vidéo déplacée.');
+      return;
+    }
+    if (btn.dataset.videoAction === 'use') {
       const src = videoSrc(name);
       const target = config.tabs.find((t) => !t.src || t.src === src) || config.tabs[0];
+      if (!target) {
+        toast('Ajoutez d’abord un onglet vidéo.', 'err');
+        return;
+      }
       target.src = src;
       const card = tabsEditor.querySelector('.tab-card[data-i="' + config.tabs.indexOf(target) + '"]');
       if (card) {
@@ -853,49 +1041,155 @@ function bindVideoList() {
       toast('Vidéo affectée à l\'onglet « ' + target.name + ' »', 'ok');
     }
   });
+
+  $('#moveSelectedBtn').addEventListener('click', moveSelectedVideos);
+  $('#deleteSelectedBtn').addEventListener('click', deleteSelectedVideos);
 }
 
-function uploadVideo() {
-  const input = $('#uploadInput');
-  const file = input.files && input.files[0];
-  if (!file) return;
-  if (!/\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi)$/i.test(file.name)) {
-    toast('Format non supporté : ' + file.name, 'err');
-    input.value = '';
+async function moveVideo(source, destination, successMessage) {
+  const wasDirty = $('#configState').classList.contains('dirty');
+  if (!readAllFromDom()) {
+    toast('Corrigez les erreurs de configuration avant de déplacer ou renommer une vidéo.', 'err');
     return;
   }
+  try {
+    await api('/api/video', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, destination })
+    });
+    updateMovedVideoReferences(source, destination);
+    recordAction(successMessage + ' ' + destination, 'ok');
+    toast(successMessage + ' ' + destination, 'ok');
+    await refreshVideos();
+    renderTabs();
+    setConfigDirty(wasDirty);
+  } catch (error) {
+    toast('Impossible de déplacer/renommer le fichier : ' + error.message, 'err');
+  }
+}
+
+function updateMovedVideoReferences(source, destination) {
+  const oldPaths = new Set([videoSrc(source), 'videos/' + source]);
+  const newPath = videoSrc(destination);
+  config.tabs.forEach((tab) => {
+    if (oldPaths.has(tab.src)) tab.src = newPath;
+    (tab.qualities || []).forEach((quality) => {
+      if (oldPaths.has(quality.src)) quality.src = newPath;
+    });
+  });
+}
+
+async function moveSelectedVideos() {
+  const names = selectedVideoNames();
+  if (!names.length) return;
+  const wasDirty = $('#configState').classList.contains('dirty');
+  if (!readAllFromDom()) {
+    toast('Corrigez les erreurs de configuration avant de déplacer des vidéos.', 'err');
+    return;
+  }
+  const folder = $('#fileDestination').value;
+  const count = names.filter((name) => (folder ? folder + '/' : '') + name.split('/').pop() !== name).length;
+  if (count && !confirm(`Déplacer ${count} fichier(s) vers ${folder || 'la racine de videos/'} ?`)) return;
+  let moved = 0;
+  const errors = [];
+  for (const name of names) {
+    const base = name.split('/').pop();
+    const destination = folder ? folder + '/' + base : base;
+    if (destination === name) continue;
+    try {
+      await api('/api/video', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: name, destination })
+      });
+      updateMovedVideoReferences(name, destination);
+      moved += 1;
+    } catch (error) {
+      errors.push(name + ': ' + error.message);
+    }
+  }
+  if (moved) {
+    recordAction(moved + ' vidéo(s) déplacée(s)', 'ok');
+    await refreshVideos();
+    renderTabs();
+    setConfigDirty(wasDirty);
+  }
+  toast(errors.length ? `${moved} déplacée(s), ${errors.length} échec(s) : ${errors[0]}` : moved + ' vidéo(s) déplacée(s).', errors.length ? 'err' : 'ok');
+}
+
+async function deleteSelectedVideos() {
+  const names = selectedVideoNames();
+  if (!names.length || !confirm(`Supprimer définitivement ${names.length} fichier(s) vidéo ?`)) return;
+  let deleted = 0;
+  const errors = [];
+  for (const name of names) {
+    try {
+      await api('/api/video?name=' + encodeURIComponent(name), { method: 'DELETE' });
+      deleted += 1;
+    } catch (error) {
+      errors.push(name + ': ' + error.message);
+    }
+  }
+  if (deleted) {
+    recordAction(deleted + ' vidéo(s) supprimée(s)', 'warn');
+    await refreshVideos();
+  }
+  toast(errors.length ? `${deleted} supprimée(s), ${errors.length} échec(s) : ${errors[0]}` : deleted + ' vidéo(s) supprimée(s).', errors.length ? 'err' : 'ok');
+}
+
+async function uploadVideo(incomingFiles) {
+  const input = $('#uploadInput');
+  const files = Array.from(incomingFiles || input.files || []);
+  if (!files.length) return;
   const prog = $('#uploadProg');
   const msg = $('#uploadMsg');
   prog.hidden = false;
   prog.value = 0;
-  msg.textContent = 'Upload en cours…';
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
-  xhr.setRequestHeader('x-admin-pass', pass);
-  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-  xhr.upload.onprogress = (e) => { if (e.lengthComputable) prog.value = (e.loaded / e.total) * 100; };
-  xhr.onload = async () => {
-    prog.hidden = true;
-    msg.textContent = '';
-    let data = null;
-    try { data = JSON.parse(xhr.responseText); } catch (e) {}
-    if (xhr.status >= 200 && xhr.status < 300 && data && data.ok) {
-      recordAction('Vidéo uploadée : ' + file.name, 'ok');
-      toast('Vidéo uploadée : ' + file.name, 'ok');
-      input.value = '';
-      await refreshVideos();
-    } else {
-      toast('Échec de l\'upload : ' + ((data && data.error) || xhr.status), 'err');
-      input.value = '';
+  const errors = [];
+  let uploaded = 0;
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    msg.textContent = `Upload ${index + 1}/${files.length} : ${file.name}`;
+    if (!/\.(mp4|m4v|webm|ogv|ogg|mov|mkv|avi)$/i.test(file.name)) {
+      errors.push(file.name + ': format non supporté');
+      continue;
     }
-  };
-  xhr.onerror = () => {
-    prog.hidden = true;
-    msg.textContent = '';
-    toast('Erreur réseau pendant l\'upload', 'err');
-  };
-  xhr.send(file);
+    try {
+      await uploadOneVideo(file, (loaded) => {
+        prog.value = Math.min(100, (loaded / Math.max(file.size, 1)) * 100);
+      });
+      uploaded += 1;
+      recordAction('Vidéo uploadée : ' + file.name, 'ok');
+    } catch (error) {
+      errors.push(file.name + ': ' + error.message);
+    }
+  }
+  prog.hidden = true;
+  msg.textContent = '';
+  if (!incomingFiles) input.value = '';
+  await refreshVideos();
+  toast(errors.length ? `${uploaded} vidéo(s) envoyée(s), ${errors.length} échec(s) : ${errors[0]}` : uploaded + ' vidéo(s) envoyée(s).', errors.length ? 'err' : 'ok');
+}
+
+function uploadOneVideo(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
+    xhr.setRequestHeader('x-admin-pass', pass);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded);
+    };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (error) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data && data.ok) resolve();
+      else reject(new Error((data && data.error) || ('HTTP ' + xhr.status)));
+    };
+    xhr.onerror = () => reject(new Error('Erreur réseau pendant l’upload'));
+    xhr.send(file);
+  });
 }
 
 async function refreshVideos() {
@@ -904,7 +1198,9 @@ async function refreshVideos() {
     videoFiles = vid.videos || [];
     renderVideoList();
     refreshSrcOptions();
-  } catch (e) { /* silence */ }
+  } catch (error) {
+    toast('Impossible d’actualiser les fichiers vidéo : ' + error.message, 'err');
+  }
 }
 
 function refreshSrcOptions() {
@@ -974,12 +1270,19 @@ async function refreshMonitor() {
     const free = Number(data.disk && data.disk.free) || 0;
     const used = total ? ((total - free) / total) * 100 : 0;
     diskEl.textContent = formatBytes(free) + ' libre / ' + Math.round(used) + '% utilisé';
-    videosEl.textContent = String(data.videos && data.videos.count ? data.videos.count : 0) + ' vidéos';
+    const videoCount = Number(data.videos && data.videos.count) || 0;
+    const videoSize = Number(data.videos && data.videos.totalSize) || 0;
+    videosEl.textContent = videoCount + ' vidéos · ' + formatBytes(videoSize);
+    $('#monitorAthleteCount').textContent = String(Number(data.athletes) || 0) + ' fiches';
+    if (data.videos && Number.isFinite(data.videos.totalSize)) {
+      videosEl.title = formatBytes(data.videos.totalSize) + ' utilisés dans videos/';
+    }
     monitor.textContent = 'OK';
   } catch (e) {
     pingEl.textContent = '—';
     diskEl.textContent = 'Indisponible';
     videosEl.textContent = '—';
+    $('#monitorAthleteCount').textContent = '—';
     monitor.textContent = 'Erreur';
   }
 
@@ -1007,6 +1310,110 @@ function formatBytes(value) {
   let unit = 0;
   while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
   return size.toFixed(size >= 10 || unit === 0 ? 0 : 1) + ' ' + units[unit];
+}
+
+function makeEntryId(prefix) {
+  return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+async function saveAthleteCard(card) {
+  const get = (name) => $(`[data-field="${name}"]`, card);
+  const athlete = {
+    id: card.dataset.id,
+    name: get('name').value.trim(),
+    discipline: get('discipline').value.trim(),
+    category: get('category').value.trim(),
+    bio: get('bio').value.trim(),
+    records: $$('.athlete-record-row', card).map((row) => ({
+      id: row.dataset.entryId || makeEntryId('record'),
+      distance: $('[data-field="distance"]', row).value.trim(),
+      time: $('[data-field="time"]', row).value.trim(),
+      date: $('[data-field="date"]', row).value,
+      competition: $('[data-field="competition"]', row).value.trim(),
+      notes: $('[data-field="notes"]', row).value.trim()
+    })),
+    trainings: $$('.athlete-training-row', card).map((row) => ({
+      id: row.dataset.entryId || makeEntryId('training'),
+      date: $('[data-field="date"]', row).value,
+      type: $('[data-field="type"]', row).value.trim(),
+      duration: Number($('[data-field="duration"]', row).value) || 0,
+      location: $('[data-field="location"]', row).value.trim(),
+      notes: $('[data-field="notes"]', row).value.trim()
+    }))
+  };
+  const passwordInput = get('password');
+  if (!athlete.name) {
+    get('name').focus();
+    toast('Le nom de l’athlète est obligatoire.', 'err');
+    return;
+  }
+  const existing = athletes.some((entry) => entry.id === athlete.id && entry.hasPassword);
+  if (!existing && passwordInput.value.length < 8) {
+    passwordInput.focus();
+    toast('Le mot de passe initial doit contenir au moins 8 caractères.', 'err');
+    return;
+  }
+  if (passwordInput.value) athlete[existing ? 'newPassword' : 'password'] = passwordInput.value;
+  const button = $('[data-athlete-action="save"]', card);
+  button.disabled = true;
+  try {
+    const result = await api(existing ? '/api/athletes/' + encodeURIComponent(athlete.id) : '/api/athletes', {
+      method: existing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(athlete)
+    });
+    const saved = result.athlete;
+    const index = athletes.findIndex((entry) => entry.id === saved.id);
+    if (index < 0) athletes.push(saved);
+    else athletes[index] = saved;
+    card.dataset.id = saved.id;
+    $('.athlete-card-head strong', card).textContent = saved.name;
+    passwordInput.value = '';
+    passwordInput.required = false;
+    passwordInput.placeholder = 'Laisser vide pour conserver le mot de passe';
+    const passwordLabel = passwordInput.closest('label');
+    passwordLabel.firstChild.textContent = 'Nouveau mot de passe (facultatif)';
+    if (!$('.athlete-link', card)) {
+      const link = document.createElement('div');
+      link.className = 'athlete-link';
+      link.innerHTML = `<label>Lien privé<input readonly value="${esc(location.origin + '/athlete.html?id=' + encodeURIComponent(saved.id))}"></label><button class="btn small" type="button" data-athlete-action="copy-link">Copier le lien</button>`;
+      card.querySelector('.athlete-card-body').insertBefore(link, card.querySelector('.athlete-card-body section'));
+    } else {
+      $('input', $('.athlete-link', card)).value = location.origin + '/athlete.html?id=' + encodeURIComponent(saved.id);
+    }
+    const openLink = document.createElement('a');
+    openLink.className = 'btn small';
+    openLink.href = '/athlete.html?id=' + encodeURIComponent(saved.id);
+    openLink.target = '_blank';
+    openLink.rel = 'noopener';
+    openLink.textContent = 'Ouvrir la fiche';
+    if (!$('.athlete-card-head a', card)) $('[data-athlete-action="save"]', card).before(openLink);
+    toast('Fiche enregistrée : ' + saved.name, 'ok');
+    recordAction('Fiche athlète enregistrée : ' + saved.name, 'ok');
+  } catch (error) {
+    toast('Impossible d’enregistrer la fiche : ' + error.message, 'err');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function downloadFullBackup() {
+  const button = $('#backupBtn');
+  button.disabled = true;
+  try {
+    const data = await api('/api/backup', { cache: 'no-store' });
+    const blob = new Blob([JSON.stringify(data.backup, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'cpv-sauvegarde-' + new Date().toISOString().slice(0, 10) + '.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    toast('Sauvegarde téléchargée : configuration et fiches (mots de passe hachés; fichiers vidéo exclus).', 'ok');
+  } catch (error) {
+    toast('Impossible de télécharger la sauvegarde : ' + error.message, 'err');
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function bindGlobals() {
@@ -1071,7 +1478,66 @@ function bindGlobals() {
   $('#exportBtn').addEventListener('click', exportConfig);
   $('#importInput').addEventListener('change', importConfig);
   $('#pwBtn').addEventListener('click', changePassword);
+  $('#backupBtn').addEventListener('click', downloadFullBackup);
   $('#refreshMonitorBtn').addEventListener('click', refreshMonitor);
+  $('#addAthleteBtn').addEventListener('click', () => {
+    let id;
+    do {
+      id = 'athlete-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    } while (athletes.some((athlete) => athlete.id === id));
+    athletes.push({ id, name: '', discipline: '', category: '', bio: '', records: [], trainings: [], hasPassword: false });
+    renderAthletes();
+    const card = $(`[data-athlete-card][data-id="${id}"]`, $('#athleteEditor'));
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('[data-field="name"]', card).focus();
+    }
+  });
+  $('#athleteEditor').addEventListener('click', async (event) => {
+    const actionButton = event.target.closest('[data-athlete-action]');
+    const card = event.target.closest('[data-athlete-card]');
+    if (!card) return;
+    if (actionButton) {
+      const action = actionButton.dataset.athleteAction;
+      if (action === 'save') return saveAthleteCard(card);
+      if (action === 'add-record') {
+        $('[data-entry-list="records"]', card).insertAdjacentHTML('beforeend', athleteRecordMarkup({ id: makeEntryId('record') }));
+        return;
+      }
+      if (action === 'add-training') {
+        $('[data-entry-list="trainings"]', card).insertAdjacentHTML('beforeend', athleteTrainingMarkup({ id: makeEntryId('training') }));
+        return;
+      }
+      if (action === 'copy-link') {
+        const value = $('input', $('.athlete-link', card)).value;
+        try {
+          await navigator.clipboard.writeText(value);
+          toast('Lien privé copié.', 'ok');
+        } catch (error) {
+          prompt('Copiez le lien privé :', value);
+        }
+        return;
+      }
+      if (action === 'delete') {
+        const athlete = athletes.find((entry) => entry.id === card.dataset.id);
+        if (athlete && athlete.hasPassword) {
+          if (!confirm('Supprimer définitivement la fiche de ' + athlete.name + ' ?')) return;
+          try {
+            await api('/api/athletes/' + encodeURIComponent(athlete.id), { method: 'DELETE' });
+            recordAction('Fiche athlète supprimée : ' + athlete.name, 'warn');
+          } catch (error) {
+            toast('Impossible de supprimer la fiche : ' + error.message, 'err');
+            return;
+          }
+        }
+        athletes = athletes.filter((entry) => entry.id !== card.dataset.id);
+        renderAthletes();
+        return;
+      }
+    }
+    const entryDelete = event.target.closest('[data-entry-action="delete"]');
+    if (entryDelete) entryDelete.closest('[data-entry-id]').remove();
+  });
   $$('.admin-section-tab').forEach((button) => button.addEventListener('click', () => showAdminSection(button.dataset.section)));
   $('#addEventBtn').addEventListener('click', () => {
     if (!Array.isArray(config.calendar)) config.calendar = [];
@@ -1221,6 +1687,7 @@ function importConfig(e) {
         accentColor: data.accentColor || '#4d7ea6',
         hint: data.hint || '',
         folders: Array.isArray(data.folders) ? data.folders : DEFAULT_FOLDERS.map((folder) => ({ ...folder, children: [] })),
+        calendar: Array.isArray(data.calendar) ? data.calendar : (config.calendar || []),
         tabs: data.tabs
       };
       render();

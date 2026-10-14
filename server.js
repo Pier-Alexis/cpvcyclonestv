@@ -13,12 +13,16 @@ const PORT = Number(process.env.PORT) || 8080;
 const BEHIND_CADDY = process.env.BEHIND_CADDY === '1';
 const CONFIG_FILE = path.join(ROOT, 'config.json');
 const AUTH_FILE = path.join(ROOT, 'auth.json');
+const ATHLETES_FILE = path.join(ROOT, 'athletes.json');
 const VIDEOS_DIR = path.join(ROOT, 'videos');
 const TLS_DIR = path.join(ROOT, 'tls');
 const TLS_KEY = path.join(TLS_DIR, 'key.pem');
 const TLS_CERT = path.join(TLS_DIR, 'cert.pem');
 const ADMIN_COOKIE = 'cpv_admin_session';
 const ADMIN_SESSION_TTL = 30 * 24 * 60 * 60;
+const ATHLETE_COOKIE = 'cpv_athlete_session';
+const ATHLETE_SESSION_TTL = 14 * 24 * 60 * 60;
+const athleteLoginAttempts = new Map();
 
 const MAX_UPLOAD = 6 * 1024 * 1024 * 1024;
 const MAX_JSON = 2 * 1024 * 1024;
@@ -51,6 +55,7 @@ const MIME = {
 if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
 if (!fs.existsSync(CONFIG_FILE)) writeJSON(CONFIG_FILE, defaultConfig());
 if (!fs.existsSync(AUTH_FILE)) writeJSON(AUTH_FILE, { password: 'cpvCyclones2026S-E' });
+if (!fs.existsSync(ATHLETES_FILE)) writeJSON(ATHLETES_FILE, []);
 
 function defaultConfig() {
   return {
@@ -154,6 +159,171 @@ function setAdminCookie(res, req, password) {
 
 function clearAdminCookie(res, req) {
   res.setHeader('set-cookie', `${ADMIN_COOKIE}=; Max-Age=0; ${adminCookieOptions(req)}`);
+}
+
+function readAthletes() {
+  const athletes = readJSON(ATHLETES_FILE, []);
+  return Array.isArray(athletes) ? athletes : [];
+}
+
+function createDataBackup() {
+  const directory = path.join(ROOT, 'backups');
+  fs.mkdirSync(directory, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  writeJSON(path.join(directory, `backup-${stamp}.json`), {
+    createdAt: new Date().toISOString(),
+    config: readJSON(CONFIG_FILE, defaultConfig()),
+    athletes: readAthletes()
+  });
+  const backups = fs.readdirSync(directory)
+    .filter((name) => /^backup-.*\.json$/.test(name))
+    .sort()
+    .reverse();
+  backups.slice(20).forEach((name) => fs.unlinkSync(path.join(directory, name)));
+}
+
+function athletePublicData(athlete) {
+  return {
+    id: athlete.id,
+    name: athlete.name,
+    discipline: athlete.discipline,
+    category: athlete.category,
+    bio: athlete.bio,
+    records: athlete.records,
+    trainings: athlete.trainings,
+    hasPassword: Boolean(athlete.passwordSalt && athlete.passwordHash)
+  };
+}
+
+function athleteSessionToken(athlete, expiresAt) {
+  const payload = base64UrlEncode(JSON.stringify({
+    id: athlete.id,
+    expiresAt,
+    nonce: crypto.randomBytes(16).toString('hex')
+  }));
+  const signature = base64UrlEncode(crypto.createHmac('sha256', athlete.passwordHash).update(payload).digest());
+  return payload + '.' + signature;
+}
+
+function findAthleteSession(req) {
+  const cookieHeader = req.headers.cookie || '';
+  const cookie = cookieHeader.split(';').map((part) => part.trim()).find((part) => part.startsWith(ATHLETE_COOKIE + '='));
+  if (!cookie) return null;
+  const [payload, signature] = cookie.slice(ATHLETE_COOKIE.length + 1).split('.');
+  if (!payload || !signature) return null;
+  try {
+    const session = JSON.parse(base64UrlDecode(payload).toString('utf8'));
+    if (typeof session.id !== 'string' || !Number.isSafeInteger(session.expiresAt) || session.expiresAt <= Math.floor(Date.now() / 1000)) return null;
+    const athlete = readAthletes().find((item) => item.id === session.id);
+    if (!athlete || !athlete.passwordHash) return null;
+    const expected = crypto.createHmac('sha256', athlete.passwordHash).update(payload).digest();
+    const actual = base64UrlDecode(signature);
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected) ? athlete : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setAthleteCookie(res, req, athlete) {
+  const expiresAt = Math.floor(Date.now() / 1000) + ATHLETE_SESSION_TTL;
+  const token = athleteSessionToken(athlete, expiresAt);
+  res.setHeader('set-cookie', `${ATHLETE_COOKIE}=${token}; Max-Age=${ATHLETE_SESSION_TTL}; ${adminCookieOptions(req)}`);
+}
+
+function clearAthleteCookie(res, req) {
+  res.setHeader('set-cookie', `${ATHLETE_COOKIE}=; Max-Age=0; ${adminCookieOptions(req)}`);
+}
+
+function clientAddress(req) {
+  if (BEHIND_CADDY) {
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (forwarded) return forwarded;
+  }
+  return req.socket.remoteAddress || 'unknown';
+}
+
+function validDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
+  const date = new Date(value + 'T00:00:00Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : '';
+}
+
+function sanitizeAthlete(raw, index) {
+  raw = raw && typeof raw === 'object' ? raw : {};
+  const id = typeof raw.id === 'string' && /^[a-z0-9_-]{1,64}$/.test(raw.id) ? raw.id : '';
+  if (!id) throw new Error('Identifiant d’athlète invalide');
+  const name = str(raw.name, '', 100);
+  if (!name) throw new Error('Le nom de chaque athlète est obligatoire');
+  const records = (Array.isArray(raw.records) ? raw.records : []).slice(0, 300).map((record, i) => {
+    record = record && typeof record === 'object' ? record : {};
+    return {
+      id: typeof record.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(record.id) ? record.id : `record-${index}-${i}`,
+      distance: str(record.distance, '', 60),
+      time: str(record.time, '', 40),
+      date: validDate(record.date),
+      competition: str(record.competition, '', 120),
+      notes: str(record.notes, '', 500)
+    };
+  }).filter((record) => record.distance || record.time || record.date || record.competition || record.notes);
+  const trainings = (Array.isArray(raw.trainings) ? raw.trainings : []).slice(0, 500).map((training, i) => {
+    training = training && typeof training === 'object' ? training : {};
+    return {
+      id: typeof training.id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(training.id) ? training.id : `training-${index}-${i}`,
+      date: validDate(training.date),
+      type: str(training.type, '', 100),
+      duration: num(training.duration, 0),
+      location: str(training.location, '', 120),
+      notes: str(training.notes, '', 1200)
+    };
+  }).filter((training) => training.date || training.type || training.duration || training.location || training.notes);
+  return {
+    id,
+    name,
+    discipline: str(raw.discipline, '', 100),
+    category: str(raw.category, '', 80),
+    bio: typeof raw.bio === 'string' ? raw.bio.slice(0, 2000).trim() : '',
+    records,
+    trainings
+  };
+}
+
+function passwordDigest(password, salt) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, key) => {
+      if (error) reject(error);
+      else resolve(key.toString('hex'));
+    });
+  });
+}
+
+function setAthletePassword(athlete, password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return passwordDigest(password, salt).then((passwordHash) => Object.assign(athlete, { passwordSalt: salt, passwordHash }));
+}
+
+function athleteLoginAllowed(req) {
+  const now = Date.now();
+  const key = clientAddress(req);
+  const attempt = athleteLoginAttempts.get(key);
+  if (attempt && attempt.blockedUntil > now) return false;
+  if (athleteLoginAttempts.size > 5000) {
+    for (const [entry, value] of athleteLoginAttempts) {
+      if (value.blockedUntil <= now && now - value.lastAttempt > 15 * 60 * 1000) athleteLoginAttempts.delete(entry);
+    }
+  }
+  return true;
+}
+
+function recordAthleteLoginFailure(req) {
+  const key = clientAddress(req);
+  const now = Date.now();
+  const attempt = athleteLoginAttempts.get(key);
+  const failures = attempt && now - attempt.lastAttempt < 15 * 60 * 1000 ? attempt.failures + 1 : 1;
+  athleteLoginAttempts.set(key, {
+    failures,
+    lastAttempt: now,
+    blockedUntil: failures >= 8 ? now + 15 * 60 * 1000 : 0
+  });
 }
 
 function findOpenssl() {
@@ -374,6 +544,29 @@ function safeJoin(base, rel) {
   return target;
 }
 
+function validVideoName(value) {
+  if (typeof value !== 'string' || !value.trim() || value.includes('\\')) return false;
+  const parts = value.split('/');
+  return parts.every((part) =>
+    part && part !== '.' && part !== '..' && !/[\x00-\x1f<>:"|?*]/.test(part)
+  ) && VIDEO_EXT.has(path.extname(value).toLowerCase());
+}
+
+function videoWebPath(name) {
+  return 'videos/' + name.split('/').map(encodeURIComponent).join('/');
+}
+
+function replaceVideoReferences(config, oldName, newName) {
+  const oldPath = videoWebPath(oldName);
+  const newPath = videoWebPath(newName);
+  (config.tabs || []).forEach((tab) => {
+    if (tab.src === oldPath || tab.src === 'videos/' + oldName) tab.src = newPath;
+    (tab.qualities || []).forEach((quality) => {
+      if (quality.src === oldPath || quality.src === 'videos/' + oldName) quality.src = newPath;
+    });
+  });
+}
+
 function sendFile(req, res, filePath, immutable) {
   fs.stat(filePath, (err, st) => {
     if (err || !st.isFile()) return notFound(res);
@@ -478,6 +671,128 @@ function listVideos() {
 async function handleApi(req, res, url) {
   const p = url.pathname;
 
+  if (p === '/api/athlete/login' && req.method === 'POST') {
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'Requête invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const id = typeof body.id === 'string' ? body.id : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!/^[a-z0-9_-]{1,64}$/.test(id) || !password) return fail(res, 401, 'Identifiant ou mot de passe incorrect');
+    if (!athleteLoginAllowed(req)) return fail(res, 429, 'Trop de tentatives. Réessayez dans 15 minutes.');
+    const athlete = readAthletes().find((item) => item.id === id);
+    const salt = athlete && athlete.passwordSalt ? athlete.passwordSalt : '00000000000000000000000000000000';
+    const digest = await passwordDigest(password, salt);
+    const expected = athlete && /^[a-f0-9]{128}$/i.test(athlete.passwordHash || '')
+      ? Buffer.from(athlete.passwordHash, 'hex')
+      : Buffer.alloc(64);
+    const actual = Buffer.from(digest, 'hex');
+    if (!athlete || expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+      recordAthleteLoginFailure(req);
+      return fail(res, 401, 'Identifiant ou mot de passe incorrect');
+    }
+    athleteLoginAttempts.delete(clientAddress(req));
+    setAthleteCookie(res, req, athlete);
+    return json(res, 200, { ok: true, athlete: athletePublicData(athlete) });
+  }
+
+  if (p === '/api/athlete/me' && req.method === 'GET') {
+    const athlete = findAthleteSession(req);
+    return athlete
+      ? json(res, 200, { ok: true, athlete: athletePublicData(athlete) })
+      : fail(res, 401, 'Connexion requise');
+  }
+
+  if (p === '/api/athlete/logout' && req.method === 'POST') {
+    clearAthleteCookie(res, req);
+    return json(res, 200, { ok: true });
+  }
+
+  if (p === '/api/athletes' && req.method === 'GET') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    return json(res, 200, { ok: true, athletes: readAthletes().map(athletePublicData) });
+  }
+
+  if (p === '/api/athletes' && req.method === 'POST') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, MAX_JSON)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'JSON invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (password.length < 8) return fail(res, 400, 'Le mot de passe doit contenir au moins 8 caractères');
+    const athletes = readAthletes();
+    if (athletes.length >= 500) return fail(res, 400, 'La limite de fiches athlètes est atteinte');
+    let athlete;
+    try {
+      athlete = sanitizeAthlete(body, 0);
+    } catch (e) {
+      return fail(res, 400, e.message);
+    }
+    if (athletes.some((item) => item.id === athlete.id)) return fail(res, 409, 'Cet identifiant existe déjà');
+    await setAthletePassword(athlete, password);
+    createDataBackup();
+    athletes.push(athlete);
+    writeJSON(ATHLETES_FILE, athletes);
+    return json(res, 201, { ok: true, athlete: athletePublicData(athlete) });
+  }
+
+  const athleteRoute = /^\/api\/athletes\/([a-z0-9_-]{1,64})$/.exec(p);
+  if (athleteRoute && ['PUT', 'DELETE'].includes(req.method)) {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    const athletes = readAthletes();
+    const index = athletes.findIndex((item) => item.id === athleteRoute[1]);
+    if (index < 0) return fail(res, 404, 'Athlète introuvable');
+    if (req.method === 'DELETE') {
+      createDataBackup();
+      athletes.splice(index, 1);
+      writeJSON(ATHLETES_FILE, athletes);
+      return json(res, 200, { ok: true });
+    }
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, MAX_JSON)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'JSON invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    let updated;
+    try {
+      updated = sanitizeAthlete(Object.assign({}, body, { id: athleteRoute[1] }), index);
+    } catch (e) {
+      return fail(res, 400, e.message);
+    }
+    const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+    if (newPassword && newPassword.length < 8) return fail(res, 400, 'Le mot de passe doit contenir au moins 8 caractères');
+    if (!newPassword) {
+      updated.passwordSalt = athletes[index].passwordSalt;
+      updated.passwordHash = athletes[index].passwordHash;
+    }
+    createDataBackup();
+    if (newPassword) await setAthletePassword(updated, newPassword);
+    athletes[index] = updated;
+    writeJSON(ATHLETES_FILE, athletes);
+    return json(res, 200, { ok: true, athlete: athletePublicData(updated) });
+  }
+
+  if (p === '/api/backup' && req.method === 'GET') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    return json(res, 200, {
+      ok: true,
+      backup: {
+        createdAt: new Date().toISOString(),
+        config: readJSON(CONFIG_FILE, defaultConfig()),
+        athletes: readAthletes()
+      }
+    });
+  }
+
   if (p === '/api/config' && req.method === 'GET') {
     const config = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig()));
     if (!hasAccess(req)) config.calendar = [];
@@ -491,6 +806,7 @@ async function handleApi(req, res, url) {
   if (p === '/api/monitor' && req.method === 'GET') {
     const videos = listVideos();
     const disk = getDiskUsage();
+    const totalVideoBytes = videos.reduce((sum, video) => sum + video.size, 0);
     return json(res, 200, {
       ok: true,
       uptime: process.uptime(),
@@ -498,8 +814,10 @@ async function handleApi(req, res, url) {
       disk,
       videos: {
         count: videos.length,
+        totalSize: totalVideoBytes,
         newest: videos.slice(0, 5).map((video) => ({ name: video.name, size: video.size, mtime: video.mtime }))
       },
+      athletes: readAthletes().length,
       ping: 'ok'
     });
   }
@@ -527,6 +845,7 @@ async function handleApi(req, res, url) {
       return fail(res, 400, 'JSON invalide : ' + e.message);
     }
     const cfg = sanitizeConfig(body);
+    createDataBackup();
     writeJSON(CONFIG_FILE, cfg);
     return json(res, 200, { ok: true, config: cfg });
   }
@@ -555,14 +874,14 @@ async function handleApi(req, res, url) {
     if (raw.includes('..') || raw.includes('/') || raw.includes('\\')) return fail(res, 400, 'Nom de fichier invalide');
     const name = path.basename(raw);
     const ext = path.extname(name).toLowerCase();
-    if (name === '.' || name === '..') return fail(res, 400, 'Nom de fichier invalide');
-    if (/[\x00-\x1f<>:"|?*]/.test(name)) return fail(res, 400, 'Nom de fichier invalide');
-    if (!VIDEO_EXT.has(ext)) return fail(res, 400, 'Extension non supportée : ' + ext);
+    if (!validVideoName(name)) return fail(res, 400, VIDEO_EXT.has(ext) ? 'Nom de fichier invalide' : 'Extension non supportée : ' + ext);
     const target = safeJoin(VIDEOS_DIR, name);
     if (!target) return fail(res, 400, 'Chemin invalide');
-    const ws = fs.createWriteStream(target);
+    const ws = fs.createWriteStream(target, { flags: 'wx' });
     let size = 0;
     let aborted = false;
+    let opened = false;
+    ws.on('open', () => { opened = true; });
     req.on('data', (c) => {
       size += c.length;
       if (size > MAX_UPLOAD) {
@@ -577,10 +896,51 @@ async function handleApi(req, res, url) {
       if (aborted) return;
       json(res, 200, { ok: true, name, size });
     });
-    ws.on('error', () => {
-      if (!res.headersSent) fail(res, 500, "Erreur d'écriture");
+    ws.on('error', (error) => {
+      if (opened) fs.unlink(target, () => {});
+      req.unpipe(ws);
+      req.resume();
+      if (!res.headersSent) fail(res, error.code === 'EEXIST' ? 409 : 500, error.code === 'EEXIST' ? 'Un fichier porte déjà ce nom' : "Erreur d'écriture");
     });
     return;
+  }
+
+  if (p === '/api/video' && req.method === 'PUT') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'Requête invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const source = typeof body.source === 'string' ? body.source.trim() : '';
+    const destination = typeof body.destination === 'string' ? body.destination.trim() : '';
+    if (!validVideoName(source) || !validVideoName(destination)) return fail(res, 400, 'Chemin vidéo invalide');
+    const sourcePath = safeJoin(VIDEOS_DIR, source);
+    const destinationPath = safeJoin(VIDEOS_DIR, destination);
+    if (!sourcePath || !destinationPath) return fail(res, 400, 'Chemin vidéo invalide');
+    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) return fail(res, 404, 'Fichier source introuvable');
+    if (!fs.existsSync(path.dirname(destinationPath)) || !fs.statSync(path.dirname(destinationPath)).isDirectory()) {
+      return fail(res, 400, 'Le dossier de destination n’existe pas');
+    }
+    if (source === destination) return json(res, 200, { ok: true, name: destination });
+    if (fs.existsSync(destinationPath)) return fail(res, 409, 'Un fichier porte déjà ce nom');
+    const config = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig()));
+    replaceVideoReferences(config, source, destination);
+    createDataBackup();
+    try {
+      fs.renameSync(sourcePath, destinationPath);
+      writeJSON(CONFIG_FILE, config);
+    } catch (error) {
+      if (fs.existsSync(destinationPath) && !fs.existsSync(sourcePath)) {
+        try { fs.renameSync(destinationPath, sourcePath); } catch (rollbackError) {
+          console.error('[déplacement vidéo] Échec du retour arrière :', rollbackError);
+        }
+      }
+      throw error;
+    }
+    return json(res, 200, { ok: true, name: destination });
   }
 
   if (p === '/api/video' && req.method === 'DELETE') {
@@ -625,7 +985,7 @@ const handleRequest = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/api/')) {
-      if (!['GET', 'POST', 'DELETE'].includes(req.method)) return fail(res, 405, 'Méthode interdite');
+      if (!['GET', 'POST', 'PUT', 'DELETE'].includes(req.method)) return fail(res, 405, 'Méthode interdite');
       return await handleApi(req, res, url);
     }
     if (!['GET', 'HEAD'].includes(req.method)) return fail(res, 405, 'Méthode interdite');
@@ -633,14 +993,19 @@ const handleRequest = async (req, res) => {
     let rel = decodeURIComponent(url.pathname);
     if (rel === '/') rel = '/index.html';
     else if (rel === '/logo') rel = '/logo.html';
+    else if (rel === '/athlete') rel = '/athlete.html';
     if (rel === '/calendar.html' && !hasAccess(req)) {
       res.writeHead(302, { Location: '/admin.html', 'Cache-Control': 'no-store' });
       return res.end();
     }
-    if (rel === '/deploy' || rel.startsWith('/deploy/')) return notFound(res);
+    const lowerRel = rel.toLowerCase();
+    if (lowerRel === '/deploy' || lowerRel.startsWith('/deploy/') || lowerRel === '/backups' || lowerRel.startsWith('/backups/')) return notFound(res);
     const target = safeJoin(ROOT, rel.slice(1));
     if (!target) return notFound(res, 'Chemin interdit');
-    if (path.basename(target) === 'auth.json' || target.endsWith('.tmp')) return notFound(res);
+    const targetParts = path.relative(ROOT, target).split(path.sep);
+    if (targetParts[0].toLowerCase() === 'backups') return notFound(res);
+    const basename = path.basename(target).toLowerCase();
+    if (['auth.json', 'athletes.json'].includes(basename) || target.toLowerCase().endsWith('.tmp')) return notFound(res);
 
     if (path.basename(target) === 'index.html' && fs.existsSync(target)) {
       return sendIndex(req, res, target);

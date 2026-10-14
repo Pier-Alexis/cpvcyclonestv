@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="Pragma" content="no-cache">
+<title>Fiche athlète — CyclonesTV</title>
+<link rel="stylesheet" href="athlete.css?v=1">
+<link rel="icon" type="image/png" href="logo.png">
+</head>
+<body>
+  <main class="athlete-shell">
+    <header class="athlete-header">
+      <a class="brand" href="index.html"><img src="logo.png" alt="Cyclones"><span>CyclonesTV</span></a>
+      <button id="logoutBtn" class="button secondary" type="button" hidden>Déconnexion</button>
+    </header>
+
+    <section id="loginPanel" class="panel login-panel">
+      <p class="eyebrow">Espace athlète</p>
+      <h1>Votre fiche personnelle</h1>
+      <p id="loginDescription">Entrez le mot de passe fourni par le club pour consulter vos informations.</p>
+      <form id="loginForm">
+        <label for="passwordInput">Mot de passe</label>
+        <input id="passwordInput" type="password" autocomplete="current-password" required>
+        <button class="button primary" type="submit">Accéder à ma fiche</button>
+      </form>
+      <p id="loginError" class="error" role="alert" hidden></p>
+    </section>
+
+    <section id="athletePanel" hidden>
+      <section class="panel profile-panel">
+        <p class="eyebrow">Espace athlète</p>
+        <h1 id="athleteName"></h1>
+        <p id="athleteMeta" class="athlete-meta"></p>
+        <p id="athleteBio" class="bio"></p>
+      </section>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Progression</p><h2>Meilleurs temps personnels</h2></div></div>
+        <div id="records" class="entry-list"></div>
+      </section>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Journal</p><h2>Entraînements</h2></div></div>
+        <div id="trainings" class="entry-list"></div>
+      </section>
+      <p class="privacy-note">Ces informations sont réservées à l’athlète concerné.</p>
+    </section>
+    <p id="pageError" class="page-error" role="alert" hidden></p>
+  </main>
+  <script src="athlete.js?v=1"></script>
+</body>
+</html>

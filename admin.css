@@ -137,7 +137,7 @@ input.err { border-color: var(--danger); }
 .metric-box strong { font-size: 16px; }
 
 .monitor-grid {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px;
 }
 .monitor-columns {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
@@ -318,18 +318,22 @@ input.err { border-color: var(--danger); }
 @media (max-width: 720px) {
   .q-row { grid-template-columns: 1fr; }
   .q-actions { justify-content: flex-end; }
-  .monitor-grid, .monitor-columns { grid-template-columns: 1fr; }
+  .monitor-grid, .monitor-columns { grid-template-columns: 1fr 1fr; }
 }
 
 /* ============ Upload / video list ============ */
 
 .upload-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.upload-dropzone { padding: 14px; border: 1px dashed var(--line); border-radius: 12px; }
+.upload-dropzone > span { color: var(--muted); font-size: 12.5px; }
+.upload-dropzone.dragover { border-color: var(--accent); background: rgba(77,126,166,.12); }
 .upload-row progress { width: 200px; height: 10px; accent-color: var(--accent); }
 #uploadMsg { color: var(--muted); font-size: 12.5px; }
 
 .vlist { list-style: none; margin: 16px 0 0; padding: 0; }
 .vlist li {
   display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
   padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -339,6 +343,32 @@ input.err { border-color: var(--danger); }
 .vlist .fname { flex: 1; font-weight: 600; word-break: break-all; }
 .vlist .fsize { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .vlist .empty { color: var(--muted); font-style: italic; }
+.vlist input[type="checkbox"] { width: auto; }
+.vlist .file-check { display: flex; align-items: center; }
+.video-tools {
+  display: grid; grid-template-columns: minmax(130px, 1fr) minmax(135px, .8fr) minmax(120px, .7fr) minmax(150px, 1fr) auto auto auto;
+  gap: 10px; align-items: end; margin-top: 16px;
+}
+.video-tools .muted-note { grid-column: 1 / -1; margin: 0; }
+.file-select-all { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.file-select-all input { width: auto; margin: 0; }
+.athlete-editor { display: grid; gap: 14px; }
+.athlete-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.athlete-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--panel2); }
+.athlete-card-head strong { overflow-wrap: anywhere; }
+.athlete-card-body { display: grid; gap: 16px; padding: 16px; }
+.athlete-card-body h3 { margin: 0 0 8px; }
+.athlete-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.athlete-record-row, .athlete-training-row {
+  display: grid; grid-template-columns: 1fr .7fr .75fr 1fr 1.2fr auto; gap: 8px; align-items: end;
+  padding: 10px; border: 1px solid var(--line); border-radius: 10px;
+}
+.athlete-training-row { grid-template-columns: .8fr 1fr .7fr 1fr 1.4fr auto; }
+.athlete-entry-list { display: grid; gap: 8px; }
+.athlete-link { display: flex; gap: 8px; align-items: end; }
+.athlete-link input { flex: 1; }
+.athlete-card-body .event-description { grid-column: 1 / -1; }
+.athlete-link label { flex: 1; min-width: 0; }
 
 /* ============ Actions / toasts ============ */
 
@@ -368,7 +398,10 @@ input.err { border-color: var(--danger); }
 @keyframes toastin { from { opacity: 0; transform: translateX(30px); } }
 
 @media (max-width: 720px) {
-  .grid2 { grid-template-columns: 1fr; }
+  .grid2 { grid-template-columns: 1fr;     .video-tools { grid-template-columns: 1fr 1fr; }
+    .video-tools > * { min-width: 0; }
+    .athlete-record-row, .athlete-training-row { grid-template-columns: 1fr 1fr; }
+  }
   .calendar-event-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .calendar-event-fields .event-title, .calendar-event-fields .event-description { grid-column: 1 / -1; }
   .tab-card-head { flex-wrap: wrap; }

@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <title>CyclonesTV</title>
-<link rel="stylesheet" href="admin.css?v=15">
+<link rel="stylesheet" href="admin.css?v=16">
 <link rel="icon" type="image/png" href="logo.png">
 </head>
 <body data-accent="#22d3ee">
@@ -56,6 +56,7 @@
       <button class="admin-section-tab" type="button" data-section="general">Général</button>
       <button class="admin-section-tab" type="button" data-section="videos">Vidéos</button>
       <button class="admin-section-tab" type="button" data-section="files">Fichiers vidéo</button>
+      <button class="admin-section-tab" type="button" data-section="athletes">Athlètes</button>
       <button class="admin-section-tab" type="button" data-section="monitor">Diagnostic</button>
     </nav>
 
@@ -126,13 +127,42 @@
     <section class="card" data-admin-section="files" hidden>
       <div class="card-head"><h2>Fichiers vidéo</h2></div>
       <p class="muted-note">Les fichiers envoyés depuis ce panneau sont enregistrés sur le serveur dans <code>videos/</code>. Les vidéos présentes dans ses sous-dossiers sont également proposées dans les sélecteurs. Pour une vidéo dans un autre dossier du serveur, indiquez son chemin dans l'onglet. Formats acceptés : .mp4, .m4v, .webm, .ogv, .mov, .mkv, .avi.</p>
-      <div class="upload-row">
-        <label class="btn primary" for="uploadInput">&#8679; Uploader une vidéo</label>
-        <input type="file" id="uploadInput" accept="video/*,.mp4,.m4v,.webm,.ogv,.mov,.mkv,.avi" hidden>
+      <div class="upload-row upload-dropzone" id="videoDropzone">
+        <label class="btn primary" for="uploadInput">&#8679; Choisir des vidéos</label>
+        <span>ou déposez les fichiers ici</span>
+        <input type="file" id="uploadInput" accept="video/*,.mp4,.m4v,.webm,.ogv,.mov,.mkv,.avi" multiple hidden>
         <progress id="uploadProg" max="100" value="0" hidden></progress>
         <span id="uploadMsg"></span>
       </div>
+      <div class="video-tools">
+        <label>Rechercher<input id="fileSearch" type="search" placeholder="Nom ou dossier…" autocomplete="off"></label>
+        <label>Date de modification<input id="fileDate" type="date"></label>
+        <label>Trier
+          <select id="fileSort">
+            <option value="newest">Plus récent</option>
+            <option value="name">Nom (A–Z)</option>
+            <option value="oldest">Plus ancien</option>
+            <option value="largest">Taille (décroissante)</option>
+          </select>
+        </label>
+        <label>Dossier de destination
+          <select id="fileDestination"><option value="">Racine de videos/</option></select>
+        </label>
+        <label class="file-select-all"><input id="selectAllFiles" type="checkbox"> Sélectionner tout</label>
+        <button class="btn small" id="moveSelectedBtn" type="button">Déplacer la sélection</button>
+        <button class="btn small danger" id="deleteSelectedBtn" type="button">Supprimer la sélection</button>
+        <span id="fileSelectionStatus" class="muted-note" role="status" aria-live="polite"></span>
+      </div>
       <ul class="vlist" id="videoList"></ul>
+    </section>
+
+    <section class="card" data-admin-section="athletes" hidden>
+      <div class="card-head">
+        <div><h2>Fiches athlètes</h2><p class="muted-note">Chaque fiche est protégée par un mot de passe distinct. Seul l’admin peut modifier les informations.</p></div>
+        <button class="btn small primary" id="addAthleteBtn" type="button">+ Ajouter un athlète</button>
+      </div>
+      <p id="athleteSummary" class="muted-note"></p>
+      <div id="athleteEditor" class="athlete-editor"></div>
     </section>
 
     <section class="card" data-admin-section="monitor" hidden>
@@ -157,6 +187,10 @@
           <span>Vidéos dans le catalogue</span>
           <strong id="monitorVideoCount">—</strong>
         </div>
+        <div class="metric-box">
+          <span>Fiches athlètes</span>
+          <strong id="monitorAthleteCount">—</strong>
+        </div>
       </div>
       <div class="monitor-columns">
         <div class="mini-panel">
@@ -176,10 +210,11 @@
 
     <section class="card actions">
       <button class="btn primary big" id="saveBtn" type="button">&#128190; Enregistrer</button>
-      <button class="btn" id="exportBtn" type="button">Exporter JSON</button>
+      <button class="btn" id="exportBtn" type="button">Exporter configuration</button>
       <label class="btn">Importer JSON
         <input type="file" id="importInput" accept=".json,application/json" hidden>
       </label>
+      <button class="btn" id="backupBtn" type="button">Télécharger la sauvegarde des données</button>
       <button class="btn" id="pwBtn" type="button">Changer le mot de passe</button>
     </section>
   </main>
@@ -187,6 +222,6 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="admin.js?v=19"></script>
+<script src="admin.js?v=20"></script>
 </body>
 </html>
