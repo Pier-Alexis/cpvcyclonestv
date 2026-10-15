@@ -16,9 +16,9 @@ L’export/import JSON existant concerne la configuration du viewer. **Télécha
 
 ## Fiches d’athlètes
 
-Dans **Athlètes**, l’admin crée et gère chaque fiche : présentation, discipline, catégorie, meilleurs temps et journal d’entraînements. Un mot de passe d’au moins 8 caractères est requis pour créer une fiche; l’admin peut le réinitialiser en saisissant un nouveau mot de passe.
+Dans **Athlètes**, l’admin crée et gère chaque fiche : présentation, catégorie, meilleurs temps et journal d’entraînements. Un mot de passe d’au moins 8 caractères est requis pour créer une fiche; l’admin peut le réinitialiser en saisissant un nouveau mot de passe.
 
-Après l’enregistrement, le panneau fournit un lien privé de la forme `/athlete.html?id=<identifiant>`. L’athlète se connecte avec le mot de passe communiqué par le club et ne peut consulter que sa propre fiche. Les mots de passe sont hachés côté serveur; les sessions sont protégées par cookie `HttpOnly` et expirent après 14 jours.
+Le bouton **Athlètes** de la page d’accueil permet de se connecter avec le mot de passe personnel, qui doit être différent pour chaque athlète; le panneau admin fournit aussi un lien direct de la forme `/athlete.html?id=<identifiant>`. L’athlète ne peut consulter que sa propre fiche. Dans son profil, il voit son calendrier et peut choisir celui d’un autre athlète. Les événements sans personne ciblée sont ceux du club; l’admin peut en limiter d’autres à des athlètes précis. Les mots de passe sont hachés côté serveur; les sessions sont protégées par cookie `HttpOnly` et expirent après 14 jours.
 
 Les fiches sont enregistrées dans `athletes.json`, créé automatiquement et exclu du dépôt Git. Les sauvegardes automatiques précédant les modifications de configuration et de fiches sont conservées dans `backups/` (20 au maximum). Le serveur empêche leur accès par les URL de fichiers statiques. Gardez aussi les sauvegardes téléchargées dans un emplacement privé.
 

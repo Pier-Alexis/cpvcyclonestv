@@ -177,6 +177,12 @@ input.err { border-color: var(--danger); }
 .calendar-event-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .calendar-event-fields .event-title { grid-column: span 2; }
 .calendar-event-fields .event-description { grid-column: 1 / -1; }
+.calendar-target-picker { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.calendar-target-picker legend { padding: 0 5px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.calendar-targets { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.calendar-target { display: inline-flex; align-items: center; gap: 6px; }
+.calendar-target input { width: auto; margin: 0; }
+.calendar-target-picker small { display: block; margin-top: 8px; color: var(--muted); }
 .calendar-empty { color: var(--muted); margin: 12px 0 0; }
 [data-admin-section][hidden] { display: none; }
 

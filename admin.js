@@ -235,6 +235,12 @@ function renderCalendarEditor() {
         <label class="event-description">Description
           <textarea data-field="description" maxlength="1200" rows="2" placeholder="Détails utiles aux membres">${esc(event.description || '')}</textarea>
         </label>
+        <fieldset class="calendar-target-picker">
+          <legend>Personnes concernées</legend>
+          <div class="calendar-targets">${athletes.filter((athlete) => athlete.hasPassword).map((athlete) => `
+            <label class="calendar-target"><input type="checkbox" data-field="targetIds" value="${esc(athlete.id)}"${(event.targetIds || []).includes(athlete.id) ? ' checked' : ''}>${esc(athlete.name)}</label>`).join('') || '<span class="muted-note">Aucune fiche athlète active.</span>'}</div>
+          <small>Laissez vide pour ajouter l’activité au calendrier de tout le club.</small>
+        </fieldset>
       </div>
     </article>`).join('');
 }
@@ -278,6 +284,27 @@ function renderAthletes() {
           </section>
         </div>
       </article>`).join('');
+}
+
+function syncCalendarTarget(athlete, remove) {
+  $$('.calendar-event-editor').forEach((card) => {
+    const targets = $('.calendar-targets', card);
+    if (!targets) return;
+    const existing = $$('[data-field="targetIds"]', targets).find((input) => input.value === athlete.id);
+    if (remove) {
+      if (existing) existing.closest('label').remove();
+      const event = config.calendar.find((item) => item.id === card.dataset.eventId);
+      if (event) event.targetIds = (event.targetIds || []).filter((id) => id !== athlete.id);
+    } else if (athlete.hasPassword && !existing) {
+      const empty = targets.querySelector('.muted-note');
+      if (empty) empty.remove();
+      const label = document.createElement('label');
+      label.className = 'calendar-target';
+      label.innerHTML = `<input type="checkbox" data-field="targetIds" value="${esc(athlete.id)}">${esc(athlete.name)}`;
+      targets.append(label);
+    } else if (existing) existing.closest('label').lastChild.textContent = athlete.name;
+  });
+  if (remove) setConfigDirty(true);
 }
 
 function athleteRecordMarkup(record) {
@@ -1364,6 +1391,7 @@ async function saveAthleteCard(card) {
     const index = athletes.findIndex((entry) => entry.id === saved.id);
     if (index < 0) athletes.push(saved);
     else athletes[index] = saved;
+    syncCalendarTarget(saved, false);
     card.dataset.id = saved.id;
     $('.athlete-card-head strong', card).textContent = saved.name;
     passwordInput.value = '';
@@ -1529,6 +1557,7 @@ function bindGlobals() {
           }
         }
         athletes = athletes.filter((entry) => entry.id !== card.dataset.id);
+        if (athlete) syncCalendarTarget(athlete, true);
         renderAthletes();
         return;
       }
@@ -1539,7 +1568,7 @@ function bindGlobals() {
   $$('.admin-section-tab').forEach((button) => button.addEventListener('click', () => showAdminSection(button.dataset.section)));
   $('#addEventBtn').addEventListener('click', () => {
     if (!Array.isArray(config.calendar)) config.calendar = [];
-    config.calendar.push({ id: 'event-' + Date.now().toString(36), title: '', date: '', startTime: '', endTime: '', location: '', category: 'Entraînement', description: '' });
+    config.calendar.push({ id: 'event-' + Date.now().toString(36), title: '', date: '', startTime: '', endTime: '', location: '', category: 'Entraînement', description: '', targetIds: [] });
     renderCalendarEditor();
     setConfigDirty(true);
     const input = $('#calendarEditor [data-field="title"]');
@@ -1586,7 +1615,8 @@ function readAllFromDom() {
       endTime: field('endTime').value,
       location: field('location').value.trim(),
       category: field('category').value,
-      description: field('description').value.trim()
+      description: field('description').value.trim(),
+      targetIds: $$('[data-field="targetIds"]:checked', card).map((input) => input.value)
     });
   });
   if (calendarHasError) {

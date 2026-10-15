@@ -474,7 +474,10 @@ function sanitizeCalendar(raw) {
       endTime: time(item.endTime),
       location: str(item.location, '', 160),
       category: str(item.category, 'Autre', 40),
-      description: typeof item.description === 'string' ? item.description.slice(0, 1200).trim() : ''
+      description: typeof item.description === 'string' ? item.description.slice(0, 1200).trim() : '',
+      targetIds: Array.isArray(item.targetIds)
+        ? [...new Set(item.targetIds.filter((targetId) => typeof targetId === 'string' && /^[a-z0-9_-]{1,64}$/.test(targetId)))].slice(0, 500)
+        : []
     };
   }).filter((item) => item.date).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 }
@@ -679,18 +682,26 @@ async function handleApi(req, res, url) {
     body = body && typeof body === 'object' ? body : {};
     const id = typeof body.id === 'string' ? body.id : '';
     const password = typeof body.password === 'string' ? body.password : '';
-    if (!/^[a-z0-9_-]{1,64}$/.test(id) || !password) return fail(res, 401, 'Identifiant ou mot de passe incorrect');
+    if ((id && !/^[a-z0-9_-]{1,64}$/.test(id)) || !password) return fail(res, 401, 'Mot de passe incorrect');
     if (!athleteLoginAllowed(req)) return fail(res, 429, 'Trop de tentatives. Réessayez dans 15 minutes.');
-    const athlete = readAthletes().find((item) => item.id === id);
-    const salt = athlete && athlete.passwordSalt ? athlete.passwordSalt : '00000000000000000000000000000000';
-    const digest = await passwordDigest(password, salt);
-    const expected = athlete && /^[a-f0-9]{128}$/i.test(athlete.passwordHash || '')
-      ? Buffer.from(athlete.passwordHash, 'hex')
-      : Buffer.alloc(64);
-    const actual = Buffer.from(digest, 'hex');
-    if (!athlete || expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    const athletes = readAthletes();
+    const candidates = id ? [athletes.find((item) => item.id === id)].filter(Boolean) : athletes.filter((item) => item.passwordSalt && item.passwordHash);
+    let athlete = null;
+    for (const candidate of candidates.length ? candidates : [null]) {
+      const salt = candidate && candidate.passwordSalt ? candidate.passwordSalt : '00000000000000000000000000000000';
+      const digest = await passwordDigest(password, salt);
+      const expected = candidate && /^[a-f0-9]{128}$/i.test(candidate.passwordHash || '')
+        ? Buffer.from(candidate.passwordHash, 'hex')
+        : Buffer.alloc(64);
+      const actual = Buffer.from(digest, 'hex');
+      if (candidate && expected.length === actual.length && crypto.timingSafeEqual(expected, actual)) {
+        athlete = candidate;
+        break;
+      }
+    }
+    if (!athlete) {
       recordAthleteLoginFailure(req);
-      return fail(res, 401, 'Identifiant ou mot de passe incorrect');
+      return fail(res, 401, 'Mot de passe incorrect');
     }
     athleteLoginAttempts.delete(clientAddress(req));
     setAthleteCookie(res, req, athlete);
@@ -702,6 +713,27 @@ async function handleApi(req, res, url) {
     return athlete
       ? json(res, 200, { ok: true, athlete: athletePublicData(athlete) })
       : fail(res, 401, 'Connexion requise');
+  }
+
+  if (p === '/api/athlete/calendar' && req.method === 'GET') {
+    const athlete = findAthleteSession(req);
+    if (!athlete) return fail(res, 401, 'Connexion requise');
+    const events = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig())).calendar;
+    const visibleEvent = (event) => {
+      const { targetIds, ...publicEvent } = event;
+      return publicEvent;
+    };
+    return json(res, 200, {
+      ok: true,
+      events: events.filter((event) => event.targetIds.length === 0 || event.targetIds.includes(athlete.id)).map(visibleEvent),
+      otherCalendars: readAthletes()
+        .filter((other) => other.id !== athlete.id && other.passwordSalt && other.passwordHash)
+        .map((other) => ({
+          id: other.id,
+          name: other.name,
+          events: events.filter((event) => event.targetIds.length === 0 || event.targetIds.includes(other.id)).map(visibleEvent)
+        }))
+    });
   }
 
   if (p === '/api/athlete/logout' && req.method === 'POST') {
@@ -793,7 +825,7 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/config' && req.method === 'GET') {
     const config = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig()));
-    if (!hasAccess(req)) config.calendar = [];
+    if (!hasAccess(req)) config.calendar = config.calendar.filter((event) => event.targetIds.length === 0);
     return json(res, 200, config);
   }
 
