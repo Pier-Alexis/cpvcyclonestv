@@ -186,7 +186,6 @@ function athletePublicData(athlete) {
   return {
     id: athlete.id,
     name: athlete.name,
-    discipline: athlete.discipline,
     category: athlete.category,
     bio: athlete.bio,
     records: athlete.records,
@@ -279,7 +278,6 @@ function sanitizeAthlete(raw, index) {
   return {
     id,
     name,
-    discipline: str(raw.discipline, '', 100),
     category: str(raw.category, '', 80),
     bio: typeof raw.bio === 'string' ? raw.bio.slice(0, 2000).trim() : '',
     records,

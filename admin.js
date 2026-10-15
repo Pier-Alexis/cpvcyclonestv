@@ -259,7 +259,6 @@ function renderAthletes() {
         <div class="athlete-card-body">
           <div class="grid2">
             <label>Nom complet<input data-field="name" maxlength="100" value="${esc(athlete.name || '')}" required></label>
-            <label>Discipline<input data-field="discipline" maxlength="100" value="${esc(athlete.discipline || '')}" placeholder="Courte piste, longue piste…"></label>
             <label>Catégorie<input data-field="category" maxlength="80" value="${esc(athlete.category || '')}" placeholder="Junior, sénior…"></label>
             <label>${athlete.hasPassword ? 'Nouveau mot de passe (facultatif)' : 'Mot de passe initial'}
               <input data-field="password" type="password" minlength="8" autocomplete="new-password" placeholder="${athlete.hasPassword ? 'Laisser vide pour conserver le mot de passe' : '8 caractères minimum'}" ${athlete.hasPassword ? '' : 'required'}>
@@ -1321,7 +1320,6 @@ async function saveAthleteCard(card) {
   const athlete = {
     id: card.dataset.id,
     name: get('name').value.trim(),
-    discipline: get('discipline').value.trim(),
     category: get('category').value.trim(),
     bio: get('bio').value.trim(),
     records: $$('.athlete-record-row', card).map((row) => ({
@@ -1485,7 +1483,7 @@ function bindGlobals() {
     do {
       id = 'athlete-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     } while (athletes.some((athlete) => athlete.id === id));
-    athletes.push({ id, name: '', discipline: '', category: '', bio: '', records: [], trainings: [], hasPassword: false });
+    athletes.push({ id, name: '', category: '', bio: '', records: [], trainings: [], hasPassword: false });
     renderAthletes();
     const card = $(`[data-athlete-card][data-id="${id}"]`, $('#athleteEditor'));
     if (card) {

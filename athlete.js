@@ -51,7 +51,7 @@ function showAthlete(athlete) {
     return;
   }
   $('#athleteName').textContent = athlete.name;
-  $('#athleteMeta').textContent = [athlete.discipline, athlete.category].filter(Boolean).join(' · ');
+  $('#athleteMeta').textContent = athlete.category || '';
   $('#athleteBio').textContent = athlete.bio || '';
   $('#athleteBio').hidden = !athlete.bio;
   renderRecords(Array.isArray(athlete.records) ? athlete.records : []);
