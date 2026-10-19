@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6f7f3" />
+    <meta name="description" content="Webmail CPV Cyclones pour mail.cpvcyclonestv.live" />
+    <title>Courrier · CPV Mail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/lucide@0.468.0"></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navigation principale">
+        <a class="brand" href="#inbox" aria-label="CPV Mail, accueil">
+          <span class="brand-mark"><i data-lucide="wind"></i></span>
+          <span class="brand-copy"><strong>CPV</strong><small>COURRIER</small></span>
+        </a>
+
+        <button class="compose-button" id="compose-open"><i data-lucide="square-pen"></i><span>Nouveau message</span><kbd>C</kbd></button>
+
+        <div class="nav-section-label">BOÎTE</div>
+        <nav class="folder-list" id="folder-list">
+          <button class="folder-link active" data-folder="inbox"><i data-lucide="inbox"></i><span>Boîte de réception</span><span class="folder-count" id="unread-count">3</span></button>
+          <button class="folder-link" data-folder="starred"><i data-lucide="star"></i><span>Suivis</span></button>
+          <button class="folder-link" data-folder="sent"><i data-lucide="send"></i><span>Envoyés</span></button>
+          <button class="folder-link" data-folder="drafts"><i data-lucide="file-pen-line"></i><span>Brouillons</span></button>
+          <button class="folder-link" data-folder="archive"><i data-lucide="archive"></i><span>Archives</span></button>
+          <button class="folder-link" data-folder="trash"><i data-lucide="trash-2"></i><span>Corbeille</span></button>
+        </nav>
+
+        <div class="nav-section-label label-spaced">ÉTIQUETTES <button class="tiny-icon" aria-label="Ajouter une étiquette"><i data-lucide="plus"></i></button></div>
+        <div class="label-list">
+          <button class="label-link" data-label="Club"><span class="label-dot dot-green"></span>Club</button>
+          <button class="label-link" data-label="Événements"><span class="label-dot dot-orange"></span>Événements</button>
+          <button class="label-link" data-label="À lire"><span class="label-dot dot-blue"></span>À lire</button>
+        </div>
+
+        <div class="sidebar-bottom">
+          <div class="connection-note"><span class="connection-dot"></span><span>Serveur non connecté</span></div>
+          <button class="account-button">
+            <span class="avatar avatar-user">C</span>
+            <span class="account-copy"><strong>CPV Cyclones</strong><small>contact@cpvcyclonestv.live</small></span>
+            <i data-lucide="chevrons-up-down"></i>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="breadcrumb"><span>CPV Mail</span><i data-lucide="chevron-right"></i><strong id="breadcrumb-folder">Boîte de réception</strong></div>
+          <div class="topbar-right">
+            <span class="preview-badge"><span></span>APERÇU</span>
+            <button class="icon-button mobile-nav-button" id="mobile-nav-open" aria-label="Ouvrir la navigation"><i data-lucide="menu"></i></button>
+            <button class="icon-button help-button" aria-label="Aide" title="Aide"><i data-lucide="circle-help"></i></button>
+            <button class="icon-button settings-button" aria-label="Paramètres" title="Paramètres"><i data-lucide="settings-2"></i></button>
+          </div>
+        </header>
+
+        <div class="workspace">
+          <section class="message-column" aria-label="Liste des courriels">
+            <div class="mail-heading">
+              <div><div class="eyebrow">ESPACE PERSONNEL</div><h1 id="folder-title">Boîte de réception</h1></div>
+              <button class="mobile-compose icon-button" id="mobile-compose" aria-label="Nouveau message"><i data-lucide="square-pen"></i></button>
+            </div>
+
+            <label class="search-box"><i data-lucide="search"></i><input id="search-input" type="search" placeholder="Rechercher dans les courriels" autocomplete="off" /><kbd>/</kbd></label>
+
+            <div class="list-toolbar">
+              <div class="toolbar-left">
+                <button class="icon-button" id="select-all" aria-label="Sélectionner les messages" title="Sélectionner"><i data-lucide="square"></i></button>
+                <button class="icon-button" id="refresh-button" aria-label="Actualiser" title="Actualiser"><i data-lucide="rotate-cw"></i></button>
+                <span class="toolbar-divider"></span>
+                <button class="filter-button selected" data-filter="all">Tous</button>
+                <button class="filter-button" data-filter="unread">Non lus</button>
+              </div>
+              <span class="result-count" id="result-count"></span>
+            </div>
+
+            <div class="message-list" id="message-list" role="list"></div>
+            <div class="empty-state hidden" id="empty-state"><span class="empty-icon"><i data-lucide="mail-open"></i></span><strong>Aucun courrier ici</strong><span>Essaie un autre dossier ou une autre recherche.</span></div>
+            <footer class="list-footer"><span><span class="footer-dot"></span>Tous les messages sont à jour</span><span>CPV MAIL · 2026</span></footer>
+          </section>
+
+          <section class="reading-column" id="reading-column" aria-label="Courriel sélectionné">
+            <div class="reading-empty" id="reading-empty">
+              <div class="empty-art"><div class="empty-art-paper"><i data-lucide="mail"></i><span></span><span></span><span></span></div><div class="empty-art-spark spark-one">✳</div><div class="empty-art-spark spark-two">✳</div></div>
+              <h2>Votre courrier,<br />à portée de main.</h2>
+              <p>Sélectionnez un message pour le lire.</p>
+              <span class="domain-chip"><i data-lucide="globe-2"></i> mail.cpvcyclonestv.live</span>
+            </div>
+            <article class="message-detail hidden" id="message-detail"></article>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="mobile-backdrop hidden" id="mobile-backdrop"></div>
+
+    <dialog class="compose-dialog" id="compose-dialog">
+      <form id="compose-form" method="dialog">
+        <div class="compose-header"><div><span class="eyebrow">NOUVEAU COURRIEL</span><h2>Composer</h2></div><button class="icon-button" type="button" id="compose-close" aria-label="Fermer"><i data-lucide="x"></i></button></div>
+        <label class="compose-field"><span>À</span><input name="to" type="email" placeholder="nom@exemple.fr" required /></label>
+        <label class="compose-field"><span>Objet</span><input name="subject" placeholder="Objet du message" required /></label>
+        <label class="compose-body-label" for="compose-body">Message</label>
+        <textarea id="compose-body" name="body" placeholder="Écrire votre message…" required></textarea>
+        <div class="compose-footer"><span class="send-status"><i data-lucide="info"></i>Envoi indisponible sans serveur connecté</span><button class="send-button" type="submit"><i data-lucide="send"></i>Envoyer</button></div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
