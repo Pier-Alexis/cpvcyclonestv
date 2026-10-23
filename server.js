@@ -16,6 +16,7 @@ const AUTH_FILE = path.join(ROOT, 'auth.json');
 const ATHLETES_FILE = path.join(ROOT, 'athletes.json');
 const VIDEOS_DIR = path.join(ROOT, 'videos');
 const YOUTUBE_DIR = path.join(VIDEOS_DIR, 'youtube');
+const PHOTOS_DIR = path.join(ROOT, 'photos');
 const TLS_DIR = path.join(ROOT, 'tls');
 const TLS_KEY = path.join(TLS_DIR, 'key.pem');
 const TLS_CERT = path.join(TLS_DIR, 'cert.pem');
@@ -28,6 +29,7 @@ const athleteLoginAttempts = new Map();
 const MAX_UPLOAD = 6 * 1024 * 1024 * 1024;
 const MAX_JSON = 2 * 1024 * 1024;
 const VIDEO_EXT = new Set(['.mp4', '.m4v', '.webm', '.ogv', '.ogg', '.mov', '.mkv', '.avi']);
+const PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg']);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -48,6 +50,7 @@ const MIME = {
   '.gif': 'image/gif',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8'
@@ -55,6 +58,7 @@ const MIME = {
 
 if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
 if (!fs.existsSync(YOUTUBE_DIR)) fs.mkdirSync(YOUTUBE_DIR, { recursive: true });
+if (!fs.existsSync(PHOTOS_DIR)) fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 if (!fs.existsSync(CONFIG_FILE)) writeJSON(CONFIG_FILE, defaultConfig());
 if (!fs.existsSync(AUTH_FILE)) writeJSON(AUTH_FILE, { password: 'cpvCyclones2026S-E' });
 if (!fs.existsSync(ATHLETES_FILE)) writeJSON(ATHLETES_FILE, []);
@@ -420,13 +424,24 @@ function sanitizeTab(raw, i, folderIds) {
     }))
     .filter((q) => q.src)
     .slice(0, 10);
+  const pRaw = Array.isArray(raw.photos) ? raw.photos : [];
+  const photos = pRaw
+    .map((p) => ({
+      src: str(p && p.src, '', 500),
+      alt: str(p && p.alt, '', 200),
+      caption: str(p && p.caption, '', 300)
+    }))
+    .filter((p) => p.src)
+    .slice(0, 200);
   return {
     name: str(raw.name, 'Vidéo ' + (i + 1), 80),
+    type: raw.type === 'photo' ? 'photo' : 'video',
     src: str(raw.src, '', 500),
     poster: str(raw.poster, '', 500),
     folderId: folderIds.has(raw.folderId) ? raw.folderId : '',
     qualities,
-    timecodes
+    timecodes,
+    photos
   };
 }
 
@@ -555,6 +570,14 @@ function validVideoName(value) {
   ) && VIDEO_EXT.has(path.extname(value).toLowerCase());
 }
 
+function validPhotoName(value) {
+  if (typeof value !== 'string' || !value.trim() || value.includes('\\')) return false;
+  const parts = value.split('/');
+  return parts.every((part) =>
+    part && part !== '.' && part !== '..' && !/[\x00-\x1f<>:"|?*]/.test(part)
+  ) && PHOTO_EXT.has(path.extname(value).toLowerCase());
+}
+
 function videoWebPath(name) {
   return 'videos/' + name.split('/').map(encodeURIComponent).join('/');
 }
@@ -652,6 +675,7 @@ function getDiskUsage() {
 function listVideos() {
   const videos = [];
   const visit = (directory) => {
+    if (!fs.existsSync(directory)) return;
     fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
       const filePath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -668,7 +692,30 @@ function listVideos() {
     });
   };
   visit(VIDEOS_DIR);
-  return videos.sort((a, b) => b.mtime - a.mtime);
+  return videos.sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name));
+}
+
+function listPhotos() {
+  const photos = [];
+  const visit = (directory) => {
+    if (!fs.existsSync(directory)) return;
+    fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
+      const filePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(filePath);
+        return;
+      }
+      if (!entry.isFile() || !PHOTO_EXT.has(path.extname(entry.name).toLowerCase())) return;
+      const st = fs.statSync(filePath);
+      photos.push({
+        name: path.relative(PHOTOS_DIR, filePath).split(path.sep).join('/'),
+        size: st.size,
+        mtime: st.mtimeMs
+      });
+    });
+  };
+  visit(PHOTOS_DIR);
+  return photos.sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name));
 }
 
 /* ---------- YouTube / direct ---------- */
@@ -1161,6 +1208,10 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, videos: listVideos() });
   }
 
+  if (p === '/api/photos' && req.method === 'GET') {
+    return json(res, 200, { ok: true, photos: listPhotos() });
+  }
+
   if (p === '/api/youtube/jobs' && req.method === 'GET') {
     if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
     const tools = youtubeTools();
@@ -1321,6 +1372,44 @@ async function handleApi(req, res, url) {
     const ext = path.extname(name).toLowerCase();
     if (!validVideoName(name)) return fail(res, 400, VIDEO_EXT.has(ext) ? 'Nom de fichier invalide' : 'Extension non supportée : ' + ext);
     const target = safeJoin(VIDEOS_DIR, name);
+    if (!target) return fail(res, 400, 'Chemin invalide');
+    const ws = fs.createWriteStream(target, { flags: 'wx' });
+    let size = 0;
+    let aborted = false;
+    let opened = false;
+    ws.on('open', () => { opened = true; });
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > MAX_UPLOAD) {
+        aborted = true;
+        ws.destroy();
+        fs.unlink(target, () => {});
+        req.destroy();
+      }
+    });
+    req.pipe(ws);
+    ws.on('finish', () => {
+      if (aborted) return;
+      json(res, 200, { ok: true, name, size });
+    });
+    ws.on('error', (error) => {
+      if (opened) fs.unlink(target, () => {});
+      req.unpipe(ws);
+      req.resume();
+      if (!res.headersSent) fail(res, error.code === 'EEXIST' ? 409 : 500, error.code === 'EEXIST' ? 'Un fichier porte déjà ce nom' : "Erreur d'écriture");
+    });
+    return;
+  }
+
+  if (p === '/api/upload/photo' && req.method === 'POST') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    const raw = (url.searchParams.get('name') || '').trim();
+    if (!raw) return fail(res, 400, 'Nom de fichier invalide');
+    if (raw.includes('..') || raw.includes('/') || raw.includes('\\')) return fail(res, 400, 'Nom de fichier invalide');
+    const name = path.basename(raw);
+    const ext = path.extname(name).toLowerCase();
+    if (!validPhotoName(name)) return fail(res, 400, PHOTO_EXT.has(ext) ? 'Nom de fichier invalide' : 'Extension non supportée : ' + ext);
+    const target = safeJoin(PHOTOS_DIR, name);
     if (!target) return fail(res, 400, 'Chemin invalide');
     const ws = fs.createWriteStream(target, { flags: 'wx' });
     let size = 0;

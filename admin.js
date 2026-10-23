@@ -12,6 +12,7 @@ const tabsEditor = $('#tabsEditor');
 let pass = '';
 let config = null;
 let videoFiles = [];
+let photoFiles = [];
 let athletes = [];
 const ACTION_LOG_KEY = 'cpvViewer:actions';
 const VIDEO_ERROR_KEY = 'cpvViewer:videoErrors';
@@ -168,13 +169,15 @@ async function showApp() {
   loginEl.hidden = true;
   appEl.hidden = false;
   try {
-    const [cfg, vid, athleteData] = await Promise.all([
+    const [cfg, vid, photosData, athleteData] = await Promise.all([
       api('/api/config'),
       api('/api/videos').catch(() => ({ videos: [] })),
+      api('/api/photos').catch(() => ({ photos: [] })),
       api('/api/athletes')
     ]);
     config = cfg;
     videoFiles = vid.videos || [];
+    photoFiles = photosData.photos || [];
     athletes = athleteData.athletes || [];
     config.folders = mergeDiscoveredFolders(config.folders || DEFAULT_FOLDERS, videoFiles.map((file) => file.name));
     render();
@@ -194,6 +197,8 @@ function render() {
   renderFolderTree();
   renderTabs();
   renderVideoList();
+  renderPhotoList();
+  renderPhotoTargetOptions();
   renderAthletes();
   renderYoutubeFolderOptions();
   setAccentPreview();
@@ -468,6 +473,7 @@ function renderTabs() {
   $$('.prev', tabsEditor).forEach((preview) => watchPreview(preview));
   refreshTabOrderControls();
   updateTabFilter();
+  renderPhotoTargetOptions();
 }
 
 function watchPreview(preview) {
@@ -508,8 +514,8 @@ function updateTabFilter() {
   $$('.tab-card', tabsEditor).forEach((card) => {
     const searchable = [
       $('.name', card).value,
-      $('.srcPath', card).value,
-      $('.poster', card).value,
+      $('.srcPath', card)?.value || '',
+      $('.poster', card)?.value || '',
       $('.folderId option:checked', card)?.textContent || ''
     ].join(' ').toLocaleLowerCase();
     const matches = !query || searchable.includes(query);
@@ -674,11 +680,12 @@ function buildTabCard(tab, i) {
   const card = document.createElement('div');
   card.className = 'tab-card';
   card.dataset.i = String(i);
+  card.dataset.tabType = tab.type === 'photo' ? 'photo' : 'video';
 
   card.innerHTML =
     '<div class="tab-card-head">' +
       '<span class="tnum">' + (i + 1) + '</span>' +
-      '<input class="name" value="' + esc(tab.name) + '" placeholder="Nom de la vidéo" maxlength="80">' +
+      '<input class="name" value="' + esc(tab.name) + '" placeholder="Nom de l\'onglet" maxlength="80">' +
       '<label class="folder-field">Dossier dans la barre du haut' +
         '<select class="folderId">' + folderOptions(tab.folderId || '') + '</select>' +
       '</label>' +
@@ -690,86 +697,107 @@ function buildTabCard(tab, i) {
       (config.tabs.length > 1 ? '<button class="btn small danger" data-act="delTab" type="button">Supprimer</button>' : '') +
     '</div>' +
     '<div class="tab-card-body">' +
-    '<div class="grid2">' +
-      '<div class="src-block">' +
-        '<label>Choisir un fichier envoyé dans videos/ (facultatif)' +
-          '<select class="src">' + srcOptions(tab.src) + '</select>' +
-        '</label>' +
-        '<label>Chemin de la vidéo (relatif à la racine du site)' +
-          '<input class="srcPath" value="' + esc(tab.src) + '" placeholder="provincialuno/mon-fichier.mp4">' +
-        '</label>' +
-        '<label>Poster (image, facultatif)' +
-          '<input class="poster" value="' + esc(tab.poster) + '" placeholder="ex : images/poster.jpg">' +
-        '</label>' +
-      '</div>' +
-      '<div class="preview-box">' +
-        '<video class="prev" controls playsinline preload="metadata"></video>' +
-        '<button class="btn small capture-btn" type="button">&#9200; Ajouter un timecode à l\'instant</button>' +
-      '</div>' +
-    '</div>' +
-    '<h3>Timecodes</h3>' +
-    '<div class="tc-wrap"><table class="tc-table"><thead>' +
-      '<tr><th>Nom</th><th>Temps</th><th>Couleur</th><th style="text-align:right">Ordre</th></tr>' +
-    '</thead><tbody></tbody></table></div>' +
-    '<button class="btn small add-tc" type="button">+ Ajouter un timecode</button>' +
-    '<h3>Qualités vidéo</h3>' +
-    '<p class="muted-note">Versions alternatives de la vidéo (ex : 720p, 480p). Le spectateur pourra les choisir dans les réglages du lecteur.</p>' +
-    '<div class="q-list"></div>' +
-    '<button class="btn small add-q" type="button">+ Ajouter une qualité</button>' +
+    (tab.type === 'photo'
+      ? '<div class="photo-editor"><p class="muted-note">Onglet de type « Photos ». Ajoutez des photos depuis le panneau Photos.</p><div class="photo-list"></div><button class="btn small add-photo" type="button">+ Ajouter une photo</button></div>'
+      : '<div class="grid2">' +
+          '<div class="src-block">' +
+            '<label>Choisir un fichier envoyé dans videos/ (facultatif)' +
+              '<select class="src">' + srcOptions(tab.src) + '</select>' +
+            '</label>' +
+            '<label>Chemin de la vidéo (relatif à la racine du site)' +
+              '<input class="srcPath" value="' + esc(tab.src) + '" placeholder="provincialuno/mon-fichier.mp4">' +
+            '</label>' +
+            '<label>Poster (image, facultatif)' +
+              '<input class="poster" value="' + esc(tab.poster) + '" placeholder="ex : images/poster.jpg">' +
+            '</label>' +
+          '</div>' +
+          '<div class="preview-box">' +
+            '<video class="prev" controls playsinline preload="metadata"></video>' +
+            '<button class="btn small capture-btn" type="button">&#9200; Ajouter un timecode à l\'instant</button>' +
+          '</div>' +
+        '</div>' +
+        '<h3>Timecodes</h3>' +
+        '<div class="tc-wrap"><table class="tc-table"><thead>' +
+          '<tr><th>Nom</th><th>Temps</th><th>Couleur</th><th style="text-align:right">Ordre</th></tr>' +
+        '</thead><tbody></tbody></table></div>' +
+        '<button class="btn small add-tc" type="button">+ Ajouter un timecode</button>' +
+        '<h3>Qualités vidéo</h3>' +
+        '<p class="muted-note">Versions alternatives de la vidéo (ex : 720p, 480p). Le spectateur pourra les choisir dans les réglages du lecteur.</p>' +
+        '<div class="q-list"></div>' +
+        '<button class="btn small add-q" type="button">+ Ajouter une qualité</button>') +
     '</div>';
 
   const qlist = $('.q-list', card);
-  (tab.qualities || []).forEach((q) => qlist.appendChild(buildQualityRow(q)));
+  if (qlist) (tab.qualities || []).forEach((q) => qlist.appendChild(buildQualityRow(q)));
 
   const tbody = $('.tc-table tbody', card);
-  if (tab.timecodes && tab.timecodes.length) {
+  if (tbody && tab.timecodes && tab.timecodes.length) {
     tab.timecodes.forEach((tc) => tbody.appendChild(buildTcRow(card, tc)));
-  } else {
+  } else if (tbody) {
     tbody.appendChild(emptyRow());
   }
 
   const prev = $('.prev', card);
-  prev.preload = 'none';
-  prev.dataset.src = tab.src || '';
-  let previewUpdateTimer;
-  $('.src', card).addEventListener('change', (e) => {
-    $('.srcPath', card).value = e.target.value;
-    prev.dataset.src = e.target.value.trim();
-    loadPreview(prev);
-    probeVideoMeta();
+  if (prev) {
+    prev.preload = 'none';
+    prev.dataset.src = tab.src || '';
+    let previewUpdateTimer;
+    $('.src', card).addEventListener('change', (e) => {
+      $('.srcPath', card).value = e.target.value;
+      prev.dataset.src = e.target.value.trim();
+      loadPreview(prev);
+      probeVideoMeta();
+    });
+    $('.srcPath', card).addEventListener('input', () => {
+      prev.dataset.src = $('.srcPath', card).value.trim();
+      clearTimeout(previewUpdateTimer);
+      previewUpdateTimer = setTimeout(() => {
+        if (card.isConnected) loadPreview(prev);
+      }, 300);
+    });
+    $('.capture-btn', card).addEventListener('click', () => {
+      const d = prev.duration;
+      if (!d || !Number.isFinite(d)) { toast('Chargez d\'abord la vidéo dans l\'aperçu', 'err'); return; }
+      $('.add-tc', card).click();
+      const rows = $$('.tc-time-input', card);
+      if (rows.length) rows[rows.length - 1].value = fmtTime(prev.currentTime);
+      toast('Timecode ajouté à ' + fmtTime(prev.currentTime));
+    });
+  }
+  $('.name', card).addEventListener('input', () => {
+    scheduleTabFilter();
+    renderPhotoTargetOptions();
   });
-  $('.srcPath', card).addEventListener('input', () => {
-    prev.dataset.src = $('.srcPath', card).value.trim();
-    clearTimeout(previewUpdateTimer);
-    previewUpdateTimer = setTimeout(() => {
-      if (card.isConnected) loadPreview(prev);
-    }, 300);
-  });
-  $('.name', card).addEventListener('input', scheduleTabFilter);
-  $('.srcPath', card).addEventListener('input', scheduleTabFilter);
+  const srcPath = $('.srcPath', card);
+  if (srcPath) srcPath.addEventListener('input', scheduleTabFilter);
   $('.folderId', card).addEventListener('change', () => {
     updateTabFilter();
     refreshTabOrderControls();
   });
-  $('.capture-btn', card).addEventListener('click', () => {
-    const d = prev.duration;
-    if (!d || !Number.isFinite(d)) { toast('Chargez d\'abord la vidéo dans l\'aperçu', 'err'); return; }
-    $('.add-tc', card).click();
-    const rows = $$('.tc-time-input', card);
-    if (rows.length) rows[rows.length - 1].value = fmtTime(prev.currentTime);
-    toast('Timecode ajouté à ' + fmtTime(prev.currentTime));
-  });
-
-  $('.add-tc', card).addEventListener('click', () => {
+  const addTcBtn = $('.add-tc', card);
+  if (addTcBtn) addTcBtn.addEventListener('click', () => {
     const tbody = $('.tc-table tbody', card);
     const ph = $('.placeholder', tbody);
     if (ph) ph.remove();
     tbody.appendChild(buildTcRow(card, { t: 0, label: '', color: '#4d7ea6' }));
   });
 
-  $('.add-q', card).addEventListener('click', () => {
+  const addQualityBtn = $('.add-q', card);
+  if (addQualityBtn) addQualityBtn.addEventListener('click', () => {
     $('.q-list', card).appendChild(buildQualityRow({ name: '', src: '' }));
   });
+
+  const photoListEl = card.querySelector('.photo-list');
+  if (photoListEl && tab.type === 'photo') {
+    (Array.isArray(tab.photos) ? tab.photos : []).forEach((p) => photoListEl.appendChild(buildPhotoRow(p)));
+  }
+  const addPhotoBtn = card.querySelector('.add-photo');
+  if (addPhotoBtn) {
+    addPhotoBtn.addEventListener('click', () => {
+      if (!photoListEl) return;
+      photoListEl.appendChild(buildPhotoRow({ src: '', alt: '', caption: '' }));
+    });
+  }
 
   card.addEventListener('click', (e) => {
     const actBtn = e.target.closest('[data-act]');
@@ -798,6 +826,11 @@ function buildTabCard(tab, i) {
       if (row) row.remove();
       return;
     }
+    if (act === 'pdel') {
+      const row = actBtn.closest('.photo-row');
+      if (row) row.remove();
+      return;
+    }
     if (act === 'del' || act === 'up' || act === 'down') {
       const tr = actBtn.closest('tr');
       const tbody = tr.parentNode;
@@ -805,7 +838,7 @@ function buildTabCard(tab, i) {
       const idx = rows.indexOf(tr);
       if (act === 'del') {
         rows[idx].remove();
-        if (!tbody.children.length) tbody.appendChild(emptyRow());
+        if (!tbody.children.length && tbody.classList.contains('tc-table')) tbody.appendChild(emptyRow());
       } else if (act === 'up' && idx > 0) {
         tbody.insertBefore(rows[idx], rows[idx - 1]);
       } else if (act === 'down' && idx < rows.length - 1) {
@@ -815,6 +848,34 @@ function buildTabCard(tab, i) {
   });
 
   return card;
+}
+
+function photoSrc(name) {
+  return '/photos/' + name.split('/').map(encodeURIComponent).join('/');
+}
+
+function photoOptions(selectedSrc) {
+  let html = '<option value="">Choisir une photo…</option>';
+  const paths = photoFiles.map((photo) => photoSrc(photo.name));
+  if (selectedSrc && !paths.includes(selectedSrc)) {
+    html += '<option value="' + esc(selectedSrc) + '" selected>Chemin actuel : ' + esc(selectedSrc) + '</option>';
+  }
+  photoFiles.forEach((photo) => {
+    const src = photoSrc(photo.name);
+    html += '<option value="' + esc(src) + '"' + (src === selectedSrc ? ' selected' : '') + '>' + esc(photo.name) + '</option>';
+  });
+  return html;
+}
+
+function buildPhotoRow(photo) {
+  const row = document.createElement('div');
+  row.className = 'photo-row';
+  row.innerHTML =
+    '<label class="photo-src-label">Fichier photo<select class="photo-src">' + photoOptions(photo.src || '') + '</select></label>' +
+    '<label>Texte alternatif<input class="photo-alt" maxlength="200" value="' + esc(photo.alt || '') + '"></label>' +
+    '<label>Légende<input class="photo-caption" maxlength="300" value="' + esc(photo.caption || '') + '"></label>' +
+    '<button class="btn small danger" data-act="pdel" type="button" aria-label="Retirer la photo">Supprimer</button>';
+  return row;
 }
 
 function emptyRow() {
@@ -871,6 +932,129 @@ function buildQualityRow(q) {
     }
   });
   return row;
+}
+
+function renderPhotoTargetOptions() {
+  const select = $('#photoTarget');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">Choisir un onglet photo…</option>' + $$('.tab-card', tabsEditor)
+    .map((card, index) => card.dataset.tabType === 'photo'
+      ? '<option value="' + index + '">' + esc($('.name', card).value || 'Photos') + '</option>'
+      : '').join('');
+  if (Array.from(select.options).some((option) => option.value === current)) select.value = current;
+}
+
+function renderPhotoList() {
+  const list = $('#photoList');
+  if (!list) return;
+  list.replaceChildren();
+  const query = ($('#photoSearch')?.value || '').trim().toLocaleLowerCase();
+  const order = $('#photoSort')?.value || 'newest';
+  const files = photoFiles.filter((photo) => !query || photo.name.toLocaleLowerCase().includes(query)).slice();
+  files.sort((a, b) => {
+    if (order === 'name') return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
+    if (order === 'oldest') return a.mtime - b.mtime;
+    if (order === 'largest') return b.size - a.size;
+    return b.mtime - a.mtime;
+  });
+  if (!files.length) {
+    const empty = document.createElement('li');
+    empty.className = 'empty';
+    empty.textContent = photoFiles.length ? 'Aucune photo ne correspond à cette recherche.' : 'Aucune photo envoyée pour le moment.';
+    list.appendChild(empty);
+    return;
+  }
+  files.forEach((photo) => {
+    const item = document.createElement('li');
+    const image = document.createElement('img');
+    image.className = 'photo-thumb';
+    image.src = photoSrc(photo.name);
+    image.alt = '';
+    image.loading = 'lazy';
+    const name = document.createElement('span');
+    name.className = 'fname';
+    name.textContent = photo.name;
+    const size = document.createElement('span');
+    size.className = 'fsize';
+    size.textContent = fmtSize(photo.size);
+    const add = document.createElement('button');
+    add.className = 'btn small';
+    add.type = 'button';
+    add.textContent = 'Ajouter à l’onglet';
+    add.dataset.photoAdd = photo.name;
+    item.append(image, name, size, add);
+    list.appendChild(item);
+  });
+}
+
+async function refreshPhotos() {
+  try {
+    const data = await api('/api/photos');
+    photoFiles = data.photos || [];
+    renderPhotoList();
+    $$('.photo-src', tabsEditor).forEach((select) => {
+      const current = select.value;
+      select.innerHTML = photoOptions(current);
+      select.value = current;
+    });
+  } catch (error) {
+    toast('Impossible d’actualiser les photos : ' + error.message, 'err');
+  }
+}
+
+async function uploadPhoto(incomingFiles) {
+  const input = $('#photoUploadInput');
+  const files = Array.from(incomingFiles || input.files || []);
+  if (!files.length) return;
+  const progress = $('#photoUploadProg');
+  const message = $('#photoUploadMsg');
+  progress.hidden = false;
+  progress.value = 0;
+  let uploaded = 0;
+  const errors = [];
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    message.textContent = 'Envoi ' + (index + 1) + '/' + files.length + ' : ' + file.name;
+    if (!/\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name)) {
+      errors.push(file.name + ' : format non supporté');
+      continue;
+    }
+    try {
+      await uploadOnePhoto(file, (loaded) => {
+        progress.value = Math.min(100, loaded / Math.max(file.size, 1) * 100);
+      });
+      uploaded += 1;
+      recordAction('Photo envoyée : ' + file.name, 'ok');
+    } catch (error) {
+      errors.push(file.name + ' : ' + error.message);
+    }
+  }
+  progress.hidden = true;
+  message.textContent = '';
+  if (!incomingFiles) input.value = '';
+  await refreshPhotos();
+  toast(errors.length ? uploaded + ' photo(s) envoyée(s), ' + errors.length + ' échec(s) : ' + errors[0] : uploaded + ' photo(s) envoyée(s).', errors.length ? 'err' : 'ok');
+}
+
+function uploadOnePhoto(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload/photo?name=' + encodeURIComponent(file.name));
+    xhr.setRequestHeader('x-admin-pass', pass);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded);
+    };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (error) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data && data.ok) resolve();
+      else reject(new Error((data && data.error) || ('HTTP ' + xhr.status)));
+    };
+    xhr.onerror = () => reject(new Error('Erreur réseau pendant l’envoi'));
+    xhr.send(file);
+  });
 }
 
 /* ---------- video files ---------- */
@@ -994,6 +1178,47 @@ function fmtSize(b) {
 
 function bindVideoList() {
   $('#uploadInput').addEventListener('change', () => uploadVideo());
+  const photoInput = $('#photoUploadInput');
+  if (photoInput) photoInput.addEventListener('change', () => uploadPhoto());
+  const photoDropzone = $('#photoDropzone');
+  if (photoDropzone) {
+    photoDropzone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      photoDropzone.classList.add('dragover');
+    });
+    photoDropzone.addEventListener('dragleave', (event) => {
+      if (!photoDropzone.contains(event.relatedTarget)) photoDropzone.classList.remove('dragover');
+    });
+    photoDropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      photoDropzone.classList.remove('dragover');
+      if (event.dataTransfer && event.dataTransfer.files.length) uploadPhoto(event.dataTransfer.files);
+    });
+  }
+  const photoSearch = $('#photoSearch');
+  if (photoSearch) photoSearch.addEventListener('input', renderPhotoList);
+  const photoSort = $('#photoSort');
+  if (photoSort) photoSort.addEventListener('change', renderPhotoList);
+  $('#photoList').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-photo-add]');
+    if (!button) return;
+    const targetValue = $('#photoTarget').value;
+    const targetIndex = Number(targetValue);
+    const targetCard = targetValue === '' ? null : $$('.tab-card', tabsEditor)[targetIndex];
+    const photoList = targetCard && $('.photo-list', targetCard);
+    if (!Number.isInteger(targetIndex) || !photoList || targetCard.dataset.tabType !== 'photo') {
+      toast('Choisissez d’abord un onglet photo.', 'err');
+      $('#photoTarget').focus();
+      return;
+    }
+    const src = photoSrc(button.dataset.photoAdd);
+    if (!$$('.photo-src', photoList).some((select) => select.value === src)) {
+      photoList.appendChild(buildPhotoRow({ src, alt: button.dataset.photoAdd.replace(/\.[^.]+$/, ''), caption: '' }));
+    }
+    $('.add-photo', targetCard).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setConfigDirty(true);
+    toast('Photo ajoutée à « ' + $('.name', targetCard).value + ' ». Enregistrez la configuration pour publier.', 'ok');
+  });
   const dropzone = $('#videoDropzone');
   dropzone.addEventListener('dragover', (event) => {
     event.preventDefault();
@@ -1617,7 +1842,7 @@ function bindGlobals() {
     if (e.target.matches('.folderId')) refreshFolderSelector(e.target);
   });
   tabsEditor.addEventListener('click', (e) => {
-    if (e.target.closest('.add-tc, .add-q, [data-act]:not([data-act="toggleTab"])')) setConfigDirty(true);
+    if (e.target.closest('.add-tc, .add-q, .add-photo, [data-act]:not([data-act="toggleTab"])')) setConfigDirty(true);
   });
 
   const syncAccent = () => {
@@ -1634,10 +1859,15 @@ function bindGlobals() {
 
   $('#addTabBtn').addEventListener('click', () => {
     try { readAllFromDom(); } catch (e) {}
-    config.tabs.push({ name: 'Vidéo ' + (config.tabs.length + 1), src: '', poster: '', folderId: '', qualities: [], timecodes: [{ t: 0, label: 'Début' }] });
+    config.tabs.push({ name: 'Vidéo ' + (config.tabs.length + 1), type: 'video', src: '', poster: '', folderId: '', qualities: [], timecodes: [{ t: 0, label: 'Début' }] });
     renderTabs();
     setConfigDirty(true);
   });
+  const addPhotoTabBtn = $('#addPhotoTabBtn');
+  if (addPhotoTabBtn) {
+    addPhotoTabBtn.addEventListener('click', createPhotoTab);
+  }
+  $('#photoCreateTabBtn').addEventListener('click', createPhotoTab);
   $('#tabSearch').addEventListener('input', scheduleTabFilter);
   $('#collapseTabsBtn').addEventListener('click', () => {
     $$('.tab-card:not([hidden])', tabsEditor).forEach((card) => {
@@ -1746,6 +1976,20 @@ function bindGlobals() {
   });
 }
 
+function createPhotoTab() {
+  try { readAllFromDom(); } catch (error) {}
+  const count = config.tabs.filter((tab) => tab.type === 'photo').length;
+  const name = count ? 'Photos ' + (count + 1) : 'Photos';
+  config.tabs.push({ name, type: 'photo', src: '', poster: '', folderId: '', qualities: [], timecodes: [], photos: [] });
+  renderTabs();
+  renderPhotoTargetOptions();
+  const selector = $('#photoTarget');
+  const newIndex = config.tabs.length - 1;
+  if (selector) selector.value = String(newIndex);
+  setConfigDirty(true);
+  toast('Onglet « ' + name + ' » créé. Ajoutez-y des photos puis enregistrez.', 'ok');
+}
+
 /* ---------- save / export / import ---------- */
 
 function readAllFromDom() {
@@ -1793,8 +2037,9 @@ function readAllFromDom() {
   $$('.tab-card', tabsEditor).forEach((card) => {
     let autoFound = false;
     const name = $('.name', card).value.trim() || 'Vidéo';
-    const src = $('.srcPath', card).value.trim();
-    const poster = $('.poster', card).value.trim();
+    const type = card.dataset.tabType === 'photo' ? 'photo' : 'video';
+    const src = $('.srcPath', card)?.value.trim() || '';
+    const poster = $('.poster', card)?.value.trim() || '';
     const folderId = $('.folderId', card).value;
     const timecodes = [];
     $$('.tc-table tbody tr', card).forEach((tr) => {
@@ -1821,7 +2066,17 @@ function readAllFromDom() {
       if (isAuto) autoFound = true;
       qualities.push({ name: qname, src: qsrc, auto: isAuto });
     });
-    tabs.push({ name, src, poster, folderId, qualities, timecodes });
+    const photos = [];
+    if (type === 'photo') {
+      $$('.photo-row', card).forEach((row) => {
+        const psrc = $('.photo-src', row).value.trim();
+        if (!psrc) return;
+        const alt = $('.photo-alt', row).value.trim();
+        const caption = $('.photo-caption', row).value.trim();
+        photos.push({ src: psrc, alt, caption });
+      });
+    }
+    tabs.push({ name, type, src, poster, folderId, qualities, timecodes, photos });
   });
   config.tabs = tabs;
   return !hasError;

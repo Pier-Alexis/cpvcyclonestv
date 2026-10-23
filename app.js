@@ -11,6 +11,7 @@ const els = {
   tabsScrollLeft: $('#tabsScrollLeft'),
   tabsScrollRight: $('#tabsScrollRight'),
   videos: $('#videos'),
+  photoGallery: $('#photoGallery'),
   player: $('#player'),
   bigPlay: $('#bigPlay'),
   hint: $('#hint'),
@@ -546,17 +547,58 @@ function selectTab(i) {
 
   renderTopNavigation();
   videos.forEach((v, idx) => v.classList.toggle('hidden', idx !== i));
+  renderActiveTab();
 
   const v = curVideo();
   v.preload = 'metadata';
   setVideoSrc(v, activeSrc(i));
   els.videoError.hidden = true;
-  restoreResumeState();
+  if (curTab().type !== 'photo') restoreResumeState();
   refreshQualityMenu();
   refreshMarkersUntilReady();
   rebuildSidebar();
   updatePlayState();
   updateChip();
+}
+
+function photoUrl(src) {
+  const value = String(src || '').trim();
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith('/')) return value;
+  return '/' + value.replace(/^\.\//, '').split('/').map(encodeURIComponent).join('/');
+}
+
+function renderActiveTab() {
+  const isPhoto = curTab().type === 'photo';
+  els.player.classList.toggle('photo-mode', isPhoto);
+  els.photoGallery.hidden = !isPhoto;
+  els.bigPlay.hidden = isPhoto;
+  els.videoError.hidden = isPhoto;
+  if (!isPhoto) return;
+
+  const photos = Array.isArray(curTab().photos) ? curTab().photos : [];
+  els.photoGallery.replaceChildren();
+  if (!photos.length) {
+    const empty = document.createElement('p');
+    empty.className = 'photo-empty';
+    empty.textContent = 'Aucune photo dans cette galerie.';
+    els.photoGallery.appendChild(empty);
+    return;
+  }
+  photos.forEach((photo) => {
+    const figure = document.createElement('figure');
+    figure.className = 'photo-card';
+    const image = document.createElement('img');
+    image.src = photoUrl(photo.src);
+    image.alt = photo.alt || photo.caption || '';
+    image.loading = 'lazy';
+    figure.appendChild(image);
+    if (photo.caption) {
+      const caption = document.createElement('figcaption');
+      caption.textContent = photo.caption;
+      figure.appendChild(caption);
+    }
+    els.photoGallery.appendChild(figure);
+  });
 }
 
 /* ============================== Playback ============================== */

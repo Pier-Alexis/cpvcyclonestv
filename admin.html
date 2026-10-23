@@ -56,6 +56,7 @@
       <button class="admin-section-tab" type="button" data-section="general">Général</button>
       <button class="admin-section-tab" type="button" data-section="videos">Vidéos</button>
       <button class="admin-section-tab" type="button" data-section="files">Fichiers vidéo</button>
+      <button class="admin-section-tab" type="button" data-section="photos">Photos</button>
       <button class="admin-section-tab" type="button" data-section="youtube">YouTube / Direct</button>
       <button class="admin-section-tab" type="button" data-section="athletes">Athlètes</button>
       <button class="admin-section-tab" type="button" data-section="monitor">Diagnostic</button>
@@ -102,7 +103,10 @@
     <section class="card" data-admin-section="videos" hidden>
       <div class="card-head">
         <h2>Vidéos &amp; onglets</h2>
-        <button class="btn small" id="addTabBtn" type="button">+ Ajouter un onglet</button>
+        <div class="tab-head-actions">
+          <button class="btn small" id="addTabBtn" type="button">+ Ajouter un onglet vidéo</button>
+          <button class="btn small" id="addPhotoTabBtn" type="button">+ Ajouter un onglet photo</button>
+        </div>
       </div>
       <p class="muted-note">Chaque onglet possède sa vidéo, son aperçu et ses timecodes. Les chemins sont relatifs à la racine du site. Utilisez les flèches pour réordonner les vidéos dans leur dossier de la barre du haut.</p>
       <div class="folder-manager">
@@ -155,6 +159,38 @@
         <span id="fileSelectionStatus" class="muted-note" role="status" aria-live="polite"></span>
       </div>
       <ul class="vlist" id="videoList"></ul>
+    </section>
+
+    <section class="card" data-admin-section="photos" hidden>
+      <div class="card-head">
+        <div>
+          <h2>Photos</h2>
+          <p class="muted-note">Envoyez des photos dans <code>photos/</code> pour les utiliser dans un onglet « Photos ».</p>
+        </div>
+        <button class="btn small" id="photoCreateTabBtn" type="button">+ Créer un onglet photo</button>
+      </div>
+      <div class="upload-row upload-dropzone" id="photoDropzone">
+        <label class="btn primary" for="photoUploadInput">&#8679; Choisir des photos</label>
+        <span>ou déposez les fichiers ici</span>
+        <input type="file" id="photoUploadInput" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg" multiple hidden>
+        <progress id="photoUploadProg" max="100" value="0" hidden></progress>
+        <span id="photoUploadMsg"></span>
+      </div>
+      <div class="video-tools">
+        <label>Rechercher<input id="photoSearch" type="search" placeholder="Nom…" autocomplete="off"></label>
+        <label>Trier
+          <select id="photoSort">
+            <option value="newest">Plus récent</option>
+            <option value="name">Nom (A–Z)</option>
+            <option value="oldest">Plus ancien</option>
+            <option value="largest">Taille (décroissante)</option>
+          </select>
+        </label>
+        <label>Ajouter les photos à
+          <select id="photoTarget"><option value="">Choisir un onglet photo…</option></select>
+        </label>
+      </div>
+      <ul class="vlist" id="photoList"></ul>
     </section>
 
     <section class="card" data-admin-section="youtube" hidden>

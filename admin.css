@@ -323,6 +323,7 @@ input.err { border-color: var(--danger); }
 
 @media (max-width: 720px) {
   .q-row { grid-template-columns: 1fr; }
+  .photo-row { grid-template-columns: 1fr; }
   .q-actions { justify-content: flex-end; }
   .monitor-grid, .monitor-columns { grid-template-columns: 1fr 1fr; }
 }
@@ -351,6 +352,20 @@ input.err { border-color: var(--danger); }
 .vlist .empty { color: var(--muted); font-style: italic; }
 .vlist input[type="checkbox"] { width: auto; }
 .vlist .file-check { display: flex; align-items: center; }
+.photo-thumb { width: 72px; height: 54px; flex: 0 0 72px; object-fit: cover; border-radius: 5px; background: #080c10; }
+.photo-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(140px, .8fr) minmax(150px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+}
+.photo-row label { min-width: 0; }
+.photo-row .btn { align-self: end; }
 .video-tools {
   display: grid; grid-template-columns: minmax(130px, 1fr) minmax(135px, .8fr) minmax(120px, .7fr) minmax(150px, 1fr) auto auto auto;
   gap: 10px; align-items: end; margin-top: 16px;

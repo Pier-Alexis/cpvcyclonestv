@@ -185,6 +185,51 @@ code { background: rgba(255, 255, 255, .08); padding: 1px 5px; border-radius: 5p
 .videos video:focus { outline: none; }
 .videos video.hidden { display: none; }
 
+.photo-gallery {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  padding: 20px;
+  background: #10161d;
+}
+.photo-gallery[hidden] { display: none; }
+.photo-card {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #18232e;
+}
+.photo-card img {
+  display: block;
+  width: 100%;
+  height: clamp(150px, 26vh, 320px);
+  object-fit: contain;
+  background: #080c10;
+}
+.photo-card figcaption {
+  padding: 9px 11px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.photo-empty {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  color: var(--muted);
+  text-align: center;
+}
+.player.photo-mode .big-play,
+.player.photo-mode .controls,
+.player.photo-mode .chip,
+.player.photo-mode .hint,
+.player.photo-mode .video-error { display: none; }
+
 /* ============================== Big play / overlays ============================== */
 
 .big-play {
