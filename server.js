@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT) || 8080;
@@ -15,6 +15,7 @@ const CONFIG_FILE = path.join(ROOT, 'config.json');
 const AUTH_FILE = path.join(ROOT, 'auth.json');
 const ATHLETES_FILE = path.join(ROOT, 'athletes.json');
 const VIDEOS_DIR = path.join(ROOT, 'videos');
+const YOUTUBE_DIR = path.join(VIDEOS_DIR, 'youtube');
 const TLS_DIR = path.join(ROOT, 'tls');
 const TLS_KEY = path.join(TLS_DIR, 'key.pem');
 const TLS_CERT = path.join(TLS_DIR, 'cert.pem');
@@ -53,6 +54,7 @@ const MIME = {
 };
 
 if (!fs.existsSync(VIDEOS_DIR)) fs.mkdirSync(VIDEOS_DIR, { recursive: true });
+if (!fs.existsSync(YOUTUBE_DIR)) fs.mkdirSync(YOUTUBE_DIR, { recursive: true });
 if (!fs.existsSync(CONFIG_FILE)) writeJSON(CONFIG_FILE, defaultConfig());
 if (!fs.existsSync(AUTH_FILE)) writeJSON(AUTH_FILE, { password: 'cpvCyclones2026S-E' });
 if (!fs.existsSync(ATHLETES_FILE)) writeJSON(ATHLETES_FILE, []);
@@ -669,6 +671,332 @@ function listVideos() {
   return videos.sort((a, b) => b.mtime - a.mtime);
 }
 
+/* ---------- YouTube / direct ---------- */
+
+const youtubeJobs = new Map();
+const YOUTUBE_MAX_ACTIVE = 2;
+const YOUTUBE_STAGES_ACTIVE = new Set(['preparing', 'downloading', 'merging', 'transcoding']);
+let youtubeToolsCache = { at: 0, value: null };
+let av1EncoderCache;
+
+function findTool(name, versionArgs) {
+  const custom = process.env[name.toUpperCase().replace(/-/g, '_') + '_PATH'];
+  const candidates = [custom, name, name + '.exe'].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      execFileSync(candidate, versionArgs, { stdio: 'ignore', windowsHide: true, timeout: 15000 });
+      return candidate;
+    } catch (e) { /* suivant */ }
+  }
+  return null;
+}
+
+function youtubeTools() {
+  const now = Date.now();
+  if (youtubeToolsCache.value && now - youtubeToolsCache.at < 60000) return youtubeToolsCache.value;
+  const value = {
+    ytdlp: findTool('yt-dlp', ['--version']),
+    ffmpeg: findTool('ffmpeg', ['-version']),
+    ffprobe: findTool('ffprobe', ['-version'])
+  };
+  youtubeToolsCache = { at: now, value };
+  return value;
+}
+
+function normalizeYoutubeUrl(value) {
+  if (typeof value !== 'string' || value.length > 600) return '';
+  let parsed;
+  try {
+    parsed = new URL(value.trim());
+  } catch (e) {
+    return '';
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  const allowed = ['youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be', 'youtube-nocookie.com'];
+  return allowed.includes(host) ? parsed.toString() : '';
+}
+
+function safeFileName(text, fallback) {
+  let base = String(text || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  base = base.replace(/['’]/g, '').replace(/[^\w\s.-]/g, ' ').replace(/\s+/g, ' ').trim();
+  base = base.replace(/^[.\s]+|[.\s]+$/g, '').slice(0, 90);
+  return base || fallback;
+}
+
+function uniqueVideoPath(base) {
+  let candidate = path.join(YOUTUBE_DIR, base + '.mp4');
+  let suffix = 2;
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(YOUTUBE_DIR, base + ' ' + suffix + '.mp4');
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function findJobFile(baseId) {
+  let entries;
+  try {
+    entries = fs.readdirSync(YOUTUBE_DIR);
+  } catch (e) {
+    return null;
+  }
+  const files = entries
+    .filter((name) => name.startsWith(baseId + '.') && VIDEO_EXT.has(path.extname(name).toLowerCase()))
+    .map((name) => path.join(YOUTUBE_DIR, name))
+    .filter((file) => {
+      try { return fs.statSync(file).isFile() && fs.statSync(file).size > 0; } catch (e) { return false; }
+    })
+    .sort((a, b) => {
+      const aMp4 = path.extname(a).toLowerCase() === '.mp4' ? 1 : 0;
+      const bMp4 = path.extname(b).toLowerCase() === '.mp4' ? 1 : 0;
+      if (aMp4 !== bMp4) return bMp4 - aMp4;
+      return fs.statSync(b).size - fs.statSync(a).size;
+    });
+  return files[0] || null;
+}
+
+function readJobTitle(baseId) {
+  const infoFile = path.join(YOUTUBE_DIR, baseId + '.info.json');
+  const info = readJSON(infoFile, null);
+  return info && typeof info.title === 'string' ? info.title.trim() : '';
+}
+
+function cleanupJobFiles(baseId, keep) {
+  let entries;
+  try {
+    entries = fs.readdirSync(YOUTUBE_DIR);
+  } catch (e) {
+    return;
+  }
+  entries
+    .filter((name) => name.startsWith(baseId + '.') || name.startsWith(baseId + '-'))
+    .forEach((name) => {
+      const file = path.join(YOUTUBE_DIR, name);
+      if (keep && path.resolve(file) === path.resolve(keep)) return;
+      try { fs.unlinkSync(file); } catch (e) { /* silencieux */ }
+    });
+}
+
+function spawnJobProcess(job, command, args, onLine) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { windowsHide: true });
+    } catch (error) {
+      resolve({ code: -1, error: error.message, stdout: '', stderr: '' });
+      return;
+    }
+    job.child = child;
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      job.child = null;
+      resolve(result);
+    };
+    const read = (stream, isError) => {
+      let rest = '';
+      stream.setEncoding('utf8');
+      stream.on('data', (chunk) => {
+        if (isError) stderr += chunk;
+        else stdout += chunk;
+        if (!onLine) return;
+        rest += chunk;
+        const lines = rest.split(/\r?\n/);
+        rest = lines.pop();
+        lines.forEach((line) => {
+          if (line.trim()) onLine(line.trim(), isError);
+        });
+      });
+      stream.on('end', () => {
+        if (onLine && rest.trim()) onLine(rest.trim(), isError);
+      });
+    };
+    read(child.stdout, false);
+    read(child.stderr, true);
+    child.on('error', (error) => finish({ code: -1, error: error.message, stdout, stderr }));
+    child.on('close', (code, signal) => finish({ code, signal, stdout, stderr }));
+  });
+}
+
+function av1Encoder(ffmpeg) {
+  if (av1EncoderCache !== undefined) return av1EncoderCache;
+  av1EncoderCache = null;
+  try {
+    const out = execFileSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+    if (/\blibsvtav1\b/.test(out)) {
+      av1EncoderCache = { name: 'libsvtav1', args: ['-preset', '8', '-crf', '32'] };
+    } else if (/\blibaom-av1\b/.test(out)) {
+      av1EncoderCache = { name: 'libaom-av1', args: ['-cpu-used', '8', '-row-mt', '1', '-crf', '32', '-b:v', '0'] };
+    }
+  } catch (e) { /* aucun encodeur */ }
+  return av1EncoderCache;
+}
+
+function probeCodec(ffprobe, file) {
+  try {
+    return execFileSync(ffprobe, [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=codec_name', '-of', 'default=nw=1:nk=1', file
+    ], { encoding: 'utf8', windowsHide: true, timeout: 30000 }).trim().toLowerCase();
+  } catch (e) {
+    return '';
+  }
+}
+
+function processError(result, label) {
+  const detail = String(result.stderr || result.stdout || '').trim().split(/\r?\n/).filter(Boolean).slice(-3).join(' ');
+  return label + ' a échoué' + (result.code != null ? ' (code ' + result.code + ')' : '') + (detail ? ' : ' + detail : '');
+}
+
+function finishCancelled(job) {
+  job.stage = 'cancelled';
+  job.message = 'Téléchargement annulé.';
+  job.finishedAt = Date.now();
+  cleanupJobFiles(job.id, null);
+}
+
+function addYoutubeTab(job, title, relative) {
+  const config = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig()));
+  config.tabs.push({
+    name: (job.name || title || 'Vidéo YouTube').slice(0, 80),
+    src: videoWebPath(relative),
+    poster: '',
+    folderId: job.folderId || '',
+    qualities: [],
+    timecodes: []
+  });
+  createDataBackup();
+  writeJSON(CONFIG_FILE, config);
+}
+
+async function runYoutubeJob(job, tools) {
+  try {
+    const baseId = job.id;
+    const outputTemplate = path.join(YOUTUBE_DIR, baseId + '.%(ext)s');
+    const args = [
+      '--no-playlist',
+      '--newline',
+      '--progress',
+      '--no-part',
+      '--write-info-json',
+      '-f', 'bv*[vcodec^=av01]+ba/b',
+      '-o', outputTemplate
+    ];
+    if (tools.ffmpeg) {
+      const ffmpegDir = path.dirname(tools.ffmpeg);
+      if (ffmpegDir && ffmpegDir !== '.') args.push('--ffmpeg-location', ffmpegDir);
+    }
+    args.push(job.url);
+
+    job.stage = 'downloading';
+    job.progress = 0;
+    job.message = 'Connexion à YouTube…';
+    const download = await spawnJobProcess(job, tools.ytdlp, args, (line) => {
+      const match = /\[download\]\s+(\d+(?:\.\d+)?)%/.exec(line);
+      if (match) {
+        const percent = Math.min(100, parseFloat(match[1]));
+        job.progress = Math.round(percent * 0.8);
+        job.message = 'Téléchargement ' + percent.toFixed(1) + ' %';
+      } else if (/\[download\] Destination:/.test(line)) {
+        job.message = 'Téléchargement en cours…';
+      }
+    });
+    if (job.cancelled) return finishCancelled(job);
+    if (download.code !== 0) throw new Error(processError(download, 'yt-dlp'));
+
+    job.stage = 'merging';
+    job.progress = 82;
+    job.message = 'Fichier téléchargé. Analyse du codec…';
+    const downloaded = findJobFile(baseId);
+    if (!downloaded) throw new Error('Le fichier téléchargé est introuvable.');
+    const title = readJobTitle(baseId) || job.name || 'Vidéo YouTube';
+    job.title = title;
+
+    const codec = tools.ffprobe ? probeCodec(tools.ffprobe, downloaded) : '';
+    const finalFile = path.join(YOUTUBE_DIR, baseId + '-final.mp4');
+    if (codec === 'av1') {
+      job.stage = 'merging';
+      job.progress = 88;
+      job.message = 'AV1 natif détecté. Remuxage en MP4…';
+      const remux = await spawnJobProcess(job, tools.ffmpeg, [
+        '-y', '-hide_banner', '-loglevel', 'error', '-i', downloaded,
+        '-map', '0:v:0', '-map', '0:a?', '-c:v', 'copy',
+        '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', finalFile
+      ], null);
+      if (job.cancelled) return finishCancelled(job);
+      if (remux.code !== 0 || !fs.existsSync(finalFile)) throw new Error(processError(remux, 'ffmpeg (remux)'));
+    } else {
+      const encoder = av1Encoder(tools.ffmpeg);
+      if (!encoder) throw new Error('Aucun encodeur AV1 disponible dans ffmpeg (libsvtav1 ou libaom-av1 requis).');
+      job.stage = 'transcoding';
+      job.progress = 85;
+      job.message = 'Conversion en AV1 avec ' + encoder.name + '… (peut prendre du temps)';
+      const transcode = await spawnJobProcess(job, tools.ffmpeg, [
+        '-y', '-hide_banner', '-loglevel', 'error', '-i', downloaded,
+        '-map', '0:v:0', '-map', '0:a?', '-c:v', encoder.name, ...encoder.args,
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart', finalFile
+      ], null);
+      if (job.cancelled) return finishCancelled(job);
+      if (transcode.code !== 0 || !fs.existsSync(finalFile)) throw new Error(processError(transcode, 'ffmpeg (AV1)'));
+    }
+
+    const slug = safeFileName(title, job.id);
+    const target = uniqueVideoPath(slug);
+    fs.renameSync(finalFile, target);
+    cleanupJobFiles(baseId, target);
+    addYoutubeTab(job, title, 'youtube/' + path.basename(target));
+
+    job.fileName = path.basename(target);
+    job.tabName = job.name || title;
+    job.stage = 'done';
+    job.progress = 100;
+    job.message = 'Vidéo ajoutée à la configuration.';
+    job.finishedAt = Date.now();
+    console.log('[YouTube] Terminé :', target);
+  } catch (error) {
+    if (job.cancelled) return finishCancelled(job);
+    job.stage = 'error';
+    job.error = error.message || 'Erreur inconnue';
+    job.message = job.error;
+    job.finishedAt = Date.now();
+    cleanupJobFiles(job.id, null);
+    console.error('[YouTube]', job.id, error);
+  }
+}
+
+function publicYoutubeJob(job) {
+  return {
+    id: job.id,
+    url: job.url,
+    name: job.name,
+    title: job.title,
+    folderId: job.folderId,
+    stage: job.stage,
+    progress: job.progress,
+    message: job.message,
+    fileName: job.fileName,
+    tabName: job.tabName,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    error: job.error
+  };
+}
+
+function pruneYoutubeJobs() {
+  const finished = [...youtubeJobs.values()]
+    .filter((job) => !YOUTUBE_STAGES_ACTIVE.has(job.stage))
+    .sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
+  while (finished.length > 30) {
+    const job = finished.shift();
+    youtubeJobs.delete(job.id);
+  }
+}
+
 async function handleApi(req, res, url) {
   const p = url.pathname;
 
@@ -831,6 +1159,93 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/videos' && req.method === 'GET') {
     return json(res, 200, { ok: true, videos: listVideos() });
+  }
+
+  if (p === '/api/youtube/jobs' && req.method === 'GET') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    const tools = youtubeTools();
+    return json(res, 200, {
+      ok: true,
+      available: Boolean(tools.ytdlp && tools.ffmpeg),
+      tools: { ytDlp: Boolean(tools.ytdlp), ffmpeg: Boolean(tools.ffmpeg), ffprobe: Boolean(tools.ffprobe) },
+      jobs: [...youtubeJobs.values()]
+        .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))
+        .map(publicYoutubeJob)
+    });
+  }
+
+  if (p === '/api/youtube/start' && req.method === 'POST') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'Requête invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const youtubeUrl = normalizeYoutubeUrl(body.url);
+    if (!youtubeUrl) return fail(res, 400, 'Lien YouTube invalide.');
+    const tools = youtubeTools();
+    if (!tools.ytdlp) return fail(res, 503, 'yt-dlp est introuvable sur le serveur.');
+    if (!tools.ffmpeg) return fail(res, 503, 'ffmpeg est introuvable sur le serveur.');
+    const name = str(body.name, '', 80);
+    const folderId = typeof body.folderId === 'string' ? body.folderId : '';
+    if (folderId) {
+      const folderIds = new Set();
+      const visit = (folders) => folders.forEach((folder) => { folderIds.add(folder.id); visit(folder.children); });
+      visit(sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig())).folders);
+      if (!folderIds.has(folderId)) return fail(res, 400, 'Dossier de destination inconnu.');
+    }
+    const active = [...youtubeJobs.values()].filter((job) => YOUTUBE_STAGES_ACTIVE.has(job.stage)).length;
+    if (active >= YOUTUBE_MAX_ACTIVE) return fail(res, 429, 'Trop de téléchargements en cours. Réessayez quand un se termine.');
+    pruneYoutubeJobs();
+    const id = 'yt-' + Date.now().toString(36) + '-' + crypto.randomBytes(3).toString('hex');
+    const job = {
+      id,
+      url: youtubeUrl,
+      name,
+      title: '',
+      folderId,
+      stage: 'preparing',
+      progress: 0,
+      message: 'En file d’attente…',
+      fileName: '',
+      tabName: '',
+      error: '',
+      startedAt: Date.now(),
+      finishedAt: null,
+      child: null,
+      cancelled: false
+    };
+    youtubeJobs.set(id, job);
+    runYoutubeJob(job, tools).catch((error) => console.error('[YouTube]', error));
+    return json(res, 201, { ok: true, job: publicYoutubeJob(job) });
+  }
+
+  if (p === '/api/youtube/cancel' && req.method === 'POST') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'Requête invalide');
+    }
+    const job = body && typeof body.id === 'string' ? youtubeJobs.get(body.id) : null;
+    if (!job) return fail(res, 404, 'Téléchargement introuvable.');
+    if (!YOUTUBE_STAGES_ACTIVE.has(job.stage)) return fail(res, 400, 'Ce téléchargement est déjà terminé.');
+    job.cancelled = true;
+    job.message = 'Annulation…';
+    if (job.child) {
+      try {
+        if (process.platform === 'win32') execFileSync('taskkill', ['/pid', String(job.child.pid), '/T', '/F'], { stdio: 'ignore' });
+        else job.child.kill('SIGTERM');
+      } catch (e) {
+        try { job.child.kill('SIGKILL'); } catch (killError) { /* silencieux */ }
+      }
+    } else {
+      finishCancelled(job);
+    }
+    return json(res, 200, { ok: true });
   }
 
   if (p === '/api/monitor' && req.method === 'GET') {

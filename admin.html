@@ -56,6 +56,7 @@
       <button class="admin-section-tab" type="button" data-section="general">Général</button>
       <button class="admin-section-tab" type="button" data-section="videos">Vidéos</button>
       <button class="admin-section-tab" type="button" data-section="files">Fichiers vidéo</button>
+      <button class="admin-section-tab" type="button" data-section="youtube">YouTube / Direct</button>
       <button class="admin-section-tab" type="button" data-section="athletes">Athlètes</button>
       <button class="admin-section-tab" type="button" data-section="monitor">Diagnostic</button>
     </nav>
@@ -156,6 +157,29 @@
       <ul class="vlist" id="videoList"></ul>
     </section>
 
+    <section class="card" data-admin-section="youtube" hidden>
+      <div class="card-head">
+        <div>
+          <h2>YouTube / Direct</h2>
+          <p class="muted-note">Collez un lien de direct ou de rediffusion. La vidéo est enregistrée sur le serveur en AV1 (natif si disponible, sinon convertie), puis ajoutée automatiquement comme onglet dans la catégorie choisie.</p>
+        </div>
+      </div>
+      <div class="yt-form">
+        <label class="yt-url">Lien YouTube
+          <input id="ytUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Nom de l'onglet (facultatif)
+          <input id="ytName" maxlength="80" placeholder="Ex. Provincial 1A - Samedi">
+        </label>
+        <label>Catégorie / dossier
+          <select id="ytFolder"></select>
+        </label>
+        <button class="btn primary" id="ytStart" type="button">Lancer le téléchargement</button>
+      </div>
+      <p id="ytTools" class="muted-note"></p>
+      <div id="ytJobs" class="yt-jobs"></div>
+    </section>
+
     <section class="card" data-admin-section="athletes" hidden>
       <div class="card-head">
         <div><h2>Fiches athlètes</h2><p class="muted-note">Chaque fiche est protégée par un mot de passe distinct. Seul l’admin peut modifier les informations.</p></div>
@@ -222,6 +246,6 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="admin.js?v=20"></script>
+<script src="admin.js?v=21"></script>
 </body>
 </html>

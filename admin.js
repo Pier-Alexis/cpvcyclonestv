@@ -181,6 +181,8 @@ async function showApp() {
     setConfigDirty(false);
     refreshMonitor();
     renderActionLog();
+    refreshYoutubeJobs();
+    if (!ytPollTimer) ytPollTimer = setInterval(refreshYoutubeJobs, 3000);
   } catch (e) {
     toast('Impossible de charger la configuration : ' + e.message, 'err');
   }
@@ -193,6 +195,7 @@ function render() {
   renderTabs();
   renderVideoList();
   renderAthletes();
+  renderYoutubeFolderOptions();
   setAccentPreview();
   renderActionLog();
 }
@@ -647,6 +650,7 @@ function createFolder(parentId) {
   else config.folders.push(folder);
   renderFolderTree();
   refreshFolderSelectors();
+  renderYoutubeFolderOptions();
   setConfigDirty(true);
   toast('Dossier créé : ' + trimmed, 'ok');
 }
@@ -1237,6 +1241,163 @@ function refreshSrcOptions() {
   });
 }
 
+/* ---------- YouTube / direct ---------- */
+
+const YT_ACTIVE_STAGES = ['preparing', 'downloading', 'merging', 'transcoding'];
+const YT_STAGE_LABELS = {
+  preparing: 'Préparation',
+  downloading: 'Téléchargement',
+  merging: 'Traitement',
+  transcoding: 'Conversion AV1',
+  done: 'Terminé',
+  error: 'Erreur',
+  cancelled: 'Annulé'
+};
+let ytPollTimer = 0;
+let ytInitialized = false;
+const ytSeenDone = new Set();
+
+function folderPathName(id, folders, parents) {
+  for (const folder of folders || []) {
+    const trail = (parents || []).concat(folder.name);
+    if (folder.id === id) return trail.join(' / ');
+    const found = folderPathName(id, folder.children, trail);
+    if (found) return found;
+  }
+  return '';
+}
+
+function renderYoutubeFolderOptions() {
+  const select = $('#ytFolder');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = folderOptions('');
+  if (current && Array.from(select.options).some((option) => option.value === current)) select.value = current;
+}
+
+function renderYoutubeJobs(jobs) {
+  const container = $('#ytJobs');
+  if (!container) return;
+  if (!jobs.length) {
+    container.innerHTML = '<p class="muted-note">Aucun téléchargement pour le moment.</p>';
+    return;
+  }
+  container.innerHTML = jobs.map((job) => {
+    const active = YT_ACTIVE_STAGES.includes(job.stage);
+    const label = YT_STAGE_LABELS[job.stage] || job.stage;
+    const title = job.name || job.title || job.url;
+    const pct = clamp(Math.round(job.progress || 0), 0, 100);
+    const cancel = active
+      ? '<button class="btn small danger" type="button" data-yt-cancel="' + esc(job.id) + '">Annuler</button>'
+      : '';
+    const file = job.fileName ? '<span class="yt-file">' + esc(job.fileName) + '</span>' : '';
+    const folder = folderPathName(job.folderId, config.folders) || 'Racine';
+    return '<article class="yt-job ' + esc(job.stage) + '">' +
+      '<div class="yt-job-head"><strong>' + esc(title) + '</strong>' +
+        '<span class="yt-stage">' + esc(label) + '</span>' + cancel + '</div>' +
+      '<div class="yt-progress"><span style="width:' + pct + '%"></span></div>' +
+      '<div class="yt-job-meta"><span>' + esc(job.message || '') + '</span><span>' + pct + ' %</span></div>' +
+      '<div class="yt-job-foot"><span>' + esc(folder) + '</span>' + file + '</div>' +
+    '</article>';
+  }).join('');
+}
+
+async function refreshYoutubeJobs() {
+  if (!config) return;
+  let data;
+  try {
+    data = await api('/api/youtube/jobs');
+  } catch (error) {
+    return;
+  }
+  const jobs = data.jobs || [];
+  renderYoutubeJobs(jobs);
+  const tools = data.tools || {};
+  const missing = [];
+  if (!tools.ytDlp) missing.push('yt-dlp');
+  if (!tools.ffmpeg) missing.push('ffmpeg');
+  const info = $('#ytTools');
+  if (info) {
+    info.textContent = data.available
+      ? 'yt-dlp et ffmpeg sont disponibles sur le serveur.'
+      : 'Outils manquants sur le serveur : ' + missing.join(', ') + '.';
+    info.classList.toggle('err', !data.available);
+  }
+  const startBtn = $('#ytStart');
+  if (startBtn && !startBtn.dataset.busy) startBtn.disabled = !data.available;
+
+  const doneIds = jobs.filter((job) => job.stage === 'done').map((job) => job.id);
+  if (!ytInitialized) {
+    doneIds.forEach((id) => ytSeenDone.add(id));
+    ytInitialized = true;
+    return;
+  }
+  const newlyDone = doneIds.filter((id) => !ytSeenDone.has(id));
+  if (!newlyDone.length) return;
+  newlyDone.forEach((id) => ytSeenDone.add(id));
+  if ($('#configState').classList.contains('dirty')) {
+    toast('Vidéo YouTube ajoutée côté serveur. Rechargez la page avant d’enregistrer pour ne pas l’écraser.', 'err');
+    return;
+  }
+  try {
+    config = await api('/api/config');
+    render();
+    setConfigDirty(false);
+    toast('Vidéo YouTube ajoutée à la configuration.', 'ok');
+  } catch (error) {
+    toast('Vidéo prête, mais la configuration n’a pas pu être rechargée : ' + error.message, 'err');
+  }
+}
+
+function bindYoutube() {
+  const startBtn = $('#ytStart');
+  if (!startBtn) return;
+  startBtn.addEventListener('click', async () => {
+    const url = $('#ytUrl').value.trim();
+    if (!url) {
+      toast('Collez un lien YouTube.', 'err');
+      $('#ytUrl').focus();
+      return;
+    }
+    startBtn.dataset.busy = '1';
+    startBtn.disabled = true;
+    try {
+      await api('/api/youtube/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, name: $('#ytName').value.trim(), folderId: $('#ytFolder').value })
+      });
+      $('#ytUrl').value = '';
+      $('#ytName').value = '';
+      recordAction('Téléchargement YouTube lancé', 'info');
+      toast('Téléchargement lancé.', 'ok');
+      await refreshYoutubeJobs();
+    } catch (error) {
+      toast('Impossible de lancer le téléchargement : ' + error.message, 'err');
+    } finally {
+      delete startBtn.dataset.busy;
+      startBtn.disabled = false;
+    }
+  });
+  $('#ytJobs').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-yt-cancel]');
+    if (!button) return;
+    button.disabled = true;
+    try {
+      await api('/api/youtube/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: button.dataset.ytCancel })
+      });
+      toast('Annulation demandée.', 'ok');
+      await refreshYoutubeJobs();
+    } catch (error) {
+      toast('Impossible d’annuler : ' + error.message, 'err');
+      button.disabled = false;
+    }
+  });
+}
+
 /* ---------- global fields ---------- */
 
 function mergeDiscoveredFolders(existingFolders, videoPaths) {
@@ -1443,6 +1604,7 @@ async function downloadFullBackup() {
 }
 
 function bindGlobals() {
+  bindYoutube();
   const markEdited = (e) => {
     const target = e.target;
     if (tabsEditor.contains(target) || $('#calendarEditor').contains(target) || target.matches('#cfgTitle, #cfgSubtitle, #cfgAdminTitle, #cfgLogoPageTitle, #cfgAccent, #cfgAccentText, #cfgHint')) {
