@@ -12,6 +12,10 @@ Ouvrez `/admin.html` pour gérer le site. Changez le mot de passe administrateur
 
 Dans **Fichiers vidéo**, l’admin peut envoyer plusieurs vidéos, rechercher et trier le catalogue, sélectionner des fichiers, les déplacer vers un sous-dossier existant, les renommer ou les supprimer. Le déplacement et le renommage mettent aussi à jour les références des onglets et des qualités configurées. Les dossiers de stockage sont sous `videos/`.
 
+## Photos
+
+Dans **Photos**, l’admin peut téléverser des images, les prévisualiser, les ajouter aux onglets photo ou les supprimer. La suppression retire aussi la photo des onglets configurés et crée une sauvegarde des données avant de modifier la configuration. Les images sont stockées dans `photos/`. La page `/photos.html` présente toute la bibliothèque avec recherche et aperçu agrandi; les albums configurés restent accessibles depuis les onglets du viewer.
+
 L’export/import JSON existant concerne la configuration du viewer. **Télécharger la sauvegarde des données** exporte en plus les fiches d’athlètes et leurs justificatifs de mot de passe hachés; les fichiers vidéo eux-mêmes ne sont pas inclus.
 
 ## Fiches d’athlètes

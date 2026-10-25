@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c1218">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Photos — CyclonesTV</title>
+<link rel="stylesheet" href="photos.css?v=1">
+<link rel="icon" type="image/png" href="logo.png">
+</head>
+<body>
+<header class="photo-topbar">
+  <a class="photo-brand" href="/" aria-label="Retour à CyclonesTV">
+    <img src="logo.png" alt="Cyclones — Viewer 2000">
+    <span>CyclonesTV</span>
+  </a>
+  <nav class="photo-tabs" aria-label="Navigation principale">
+    <a class="nav-tab" href="/">Viewer vidéo</a>
+    <a class="nav-tab active" href="/photos.html" aria-current="page">Photos</a>
+  </nav>
+  <div class="photo-actions">
+    <a class="nav-button" href="/admin.html" title="Panneau d’administration">&#9881;<span class="hide-sm"> Administration</span></a>
+  </div>
+</header>
+
+<main class="gallery">
+  <div class="gallery-head">
+    <div>
+      <p class="eyebrow">CPV CYCLONES</p>
+      <h1>Galerie photo</h1>
+      <p class="gallery-description">Les moments forts du club, réunis en images.</p>
+    </div>
+    <label class="photo-search">
+      <span class="visually-hidden">Rechercher une photo</span>
+      <input id="photoSearch" type="search" placeholder="Rechercher une photo…" autocomplete="off">
+    </label>
+  </div>
+
+  <div class="gallery-meta">
+    <p id="galleryStatus" role="status" aria-live="polite">Chargement des photos…</p>
+    <span id="photoCount" aria-live="polite"></span>
+  </div>
+  <section class="photo-grid" id="photoGrid" aria-label="Photos du club"></section>
+</main>
+
+<dialog class="photo-dialog" id="photoDialog" aria-label="Aperçu de la photo">
+  <button class="dialog-close" id="dialogClose" type="button" aria-label="Fermer l’aperçu">&times;</button>
+  <img id="dialogImage" alt="">
+  <div class="dialog-caption">
+    <p id="dialogName"></p>
+    <a id="photoDownload" download>Télécharger</a>
+  </div>
+</dialog>
+
+<script src="photos.js?v=1"></script>
+</body>
+</html>

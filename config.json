@@ -38,9 +38,11 @@
       ]
     }
   ],
+  "calendar": [],
   "tabs": [
     {
       "name": "Provincial 1A Rimouski - Samedi",
+      "type": "video",
       "src": "provincialuno/Provincial%201A%20Rimouski%203%20oct%20-%20Samedi.mp4",
       "poster": "",
       "folderId": "courte-piste",
@@ -192,10 +194,12 @@
           "label": "Groupe 5m Relais",
           "color": "#4d7ea6"
         }
-      ]
+      ],
+      "photos": []
     },
     {
       "name": "Provincial 1A - Dimanche",
+      "type": "video",
       "src": "provincialuno/Provincial%201A%20Rimouski%204%20oct%20-%20Dimanche.mp4",
       "poster": "",
       "folderId": "courte-piste",
@@ -362,10 +366,12 @@
           "label": "Charles 500m finale",
           "color": "#4d7ea6"
         }
-      ]
+      ],
+      "photos": []
     },
     {
       "name": "Provincial 4A jour 2 2026",
+      "type": "video",
       "src": "videos/Provincial%204A%20Rimouski%208%20mars.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -376,10 +382,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Provincial 4A jour 1 2026",
+      "type": "video",
       "src": "videos/Provincial%204A%20Rimouski%207%20mars.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -390,10 +398,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Provincial 3A Montréal 2026",
+      "type": "video",
       "src": "videos/Provincial%203A%20Montr%C3%A9al.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -404,10 +414,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Provincial 2B Chicoutimi 2025",
+      "type": "video",
       "src": "videos/Provincial%202B%20Chicoutimi.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -418,10 +430,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Provincial 1D RDL 2025",
+      "type": "video",
       "src": "videos/Provincial%201D%20RDL%2012%20oct.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -432,10 +446,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Championnats Québecois CP jour 2 2026",
+      "type": "video",
       "src": "videos/Championnats%20Qu%C3%A9becois%20CP%205%20avril%202026%20Rim.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -446,10 +462,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Championnats Québecois CP jour 1 2026",
+      "type": "video",
       "src": "videos/Championnats%20Qu%C3%A9becois%20CP%204%20avril%202026%20Rim.mp4",
       "poster": "",
       "folderId": "folder-mv08l9bb-n9ycekv",
@@ -460,10 +478,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Coupe Québec 1 jour 2",
+      "type": "video",
       "src": "videos/Coupe%20Qu%C3%A9bec%201%20jour%202.mp4",
       "poster": "",
       "folderId": "longue-piste",
@@ -474,10 +494,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Coupe Québec 1 jour 1",
+      "type": "video",
       "src": "videos/Coupe%20Qu%C3%A9bec%201%20jour%201%20vrai.mp4",
       "poster": "",
       "folderId": "longue-piste",
@@ -488,10 +510,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Championnats Québecois LP Jeunesse 2026",
+      "type": "video",
       "src": "videos/Championnats%20Qu%C3%A9becois%20LP%202026.mp4",
       "poster": "",
       "folderId": "folder-mv08lchj-gzi76w2",
@@ -502,10 +526,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Coupe Jeunesse 2 2026",
+      "type": "video",
       "src": "videos/Coupe%20Jeunesse%202%202026.mp4",
       "poster": "",
       "folderId": "folder-mv08lchj-gzi76w2",
@@ -516,10 +542,12 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
     },
     {
       "name": "Coupe Jeunesse 1 2025",
+      "type": "video",
       "src": "videos/Coupe%20Jeunesse%201%202026.mp4",
       "poster": "",
       "folderId": "folder-mv08lchj-gzi76w2",
@@ -530,7 +558,29 @@
           "auto": true
         }
       ],
-      "timecodes": []
+      "timecodes": [],
+      "photos": []
+    },
+    {
+      "name": "Photos",
+      "type": "photo",
+      "src": "",
+      "poster": "",
+      "folderId": "",
+      "qualities": [],
+      "timecodes": [],
+      "photos": [
+        {
+          "src": "/photos/DSC_0506.jpg",
+          "alt": "DSC_0506",
+          "caption": ""
+        },
+        {
+          "src": "/photos/IMG_2572.jpg",
+          "alt": "IMG_2572",
+          "caption": ""
+        }
+      ]
     }
   ]
 }

@@ -983,7 +983,21 @@ function renderPhotoList() {
     add.type = 'button';
     add.textContent = 'Ajouter à l’onglet';
     add.dataset.photoAdd = photo.name;
-    item.append(image, name, size, add);
+    const view = document.createElement('a');
+    view.className = 'btn small';
+    view.href = photoSrc(photo.name);
+    view.target = '_blank';
+    view.rel = 'noopener';
+    view.textContent = 'Voir';
+    const remove = document.createElement('button');
+    remove.className = 'btn small danger';
+    remove.type = 'button';
+    remove.textContent = 'Supprimer';
+    remove.dataset.photoDelete = photo.name;
+    const actions = document.createElement('div');
+    actions.className = 'photo-file-actions';
+    actions.append(add, view, remove);
+    item.append(image, name, size, actions);
     list.appendChild(item);
   });
 }
@@ -1199,7 +1213,37 @@ function bindVideoList() {
   if (photoSearch) photoSearch.addEventListener('input', renderPhotoList);
   const photoSort = $('#photoSort');
   if (photoSort) photoSort.addEventListener('change', renderPhotoList);
-  $('#photoList').addEventListener('click', (event) => {
+  $('#photoList').addEventListener('click', async (event) => {
+    const remove = event.target.closest('[data-photo-delete]');
+    if (remove) {
+      const name = remove.dataset.photoDelete;
+      if (!confirm('Supprimer définitivement la photo « ' + name + ' » ? Elle sera aussi retirée des onglets photo configurés.')) return;
+      remove.disabled = true;
+      try {
+        const result = await api('/api/photos?name=' + encodeURIComponent(name), { method: 'DELETE' });
+        let localReferences = 0;
+        $$('.photo-row', tabsEditor).forEach((row) => {
+          if ($('.photo-src', row).value !== photoSrc(name)) return;
+          row.remove();
+          localReferences += 1;
+        });
+        config.tabs.forEach((tab) => {
+          if (tab.type !== 'photo') return;
+          const tabPhotos = Array.isArray(tab.photos) ? tab.photos : [];
+          const kept = tabPhotos.filter((photo) => photo.src !== photoSrc(name));
+          localReferences += tabPhotos.length - kept.length;
+          tab.photos = kept;
+        });
+        if (localReferences || result.removedReferences) setConfigDirty(true);
+        recordAction('Photo supprimée : ' + name, 'warn');
+        await refreshPhotos();
+        toast('Photo supprimée : ' + name, 'ok');
+      } catch (error) {
+        remove.disabled = false;
+        toast('Impossible de supprimer la photo : ' + error.message, 'err');
+      }
+      return;
+    }
     const button = event.target.closest('[data-photo-add]');
     if (!button) return;
     const targetValue = $('#photoTarget').value;

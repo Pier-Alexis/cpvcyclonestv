@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <title>CyclonesTV</title>
-<link rel="stylesheet" href="admin.css?v=16">
+<link rel="stylesheet" href="admin.css?v=17">
 <link rel="icon" type="image/png" href="logo.png">
 </head>
 <body data-accent="#22d3ee">
@@ -167,7 +167,10 @@
           <h2>Photos</h2>
           <p class="muted-note">Envoyez des photos dans <code>photos/</code> pour les utiliser dans un onglet « Photos ».</p>
         </div>
-        <button class="btn small" id="photoCreateTabBtn" type="button">+ Créer un onglet photo</button>
+        <div class="photo-heading-actions">
+          <a class="btn small" href="/photos.html" target="_blank" rel="noopener">Voir la galerie</a>
+          <button class="btn small primary" id="photoCreateTabBtn" type="button">+ Créer un onglet photo</button>
+        </div>
       </div>
       <div class="upload-row upload-dropzone" id="photoDropzone">
         <label class="btn primary" for="photoUploadInput">&#8679; Choisir des photos</label>
@@ -282,6 +285,6 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="admin.js?v=21"></script>
+<script src="admin.js?v=22"></script>
 </body>
 </html>

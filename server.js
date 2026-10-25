@@ -578,6 +578,17 @@ function validPhotoName(value) {
   ) && PHOTO_EXT.has(path.extname(value).toLowerCase());
 }
 
+function photoReferenceName(value) {
+  if (typeof value !== 'string') return '';
+  const match = /^(?:\.\/)?\/?photos\/(.+)$/i.exec(value.trim());
+  if (!match) return '';
+  try {
+    return match[1].split('/').map((part) => decodeURIComponent(part)).join('/');
+  } catch (error) {
+    return '';
+  }
+}
+
 function videoWebPath(name) {
   return 'videos/' + name.split('/').map(encodeURIComponent).join('/');
 }
@@ -1210,6 +1221,44 @@ async function handleApi(req, res, url) {
 
   if (p === '/api/photos' && req.method === 'GET') {
     return json(res, 200, { ok: true, photos: listPhotos() });
+  }
+
+  if (p === '/api/photos' && req.method === 'DELETE') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    const name = (url.searchParams.get('name') || '').trim();
+    if (!validPhotoName(name)) return fail(res, 400, 'Nom de photo invalide');
+    const target = safeJoin(PHOTOS_DIR, name);
+    if (!target) return fail(res, 400, 'Chemin de photo invalide');
+
+    let stat;
+    try {
+      stat = fs.lstatSync(target);
+    } catch (error) {
+      if (error.code === 'ENOENT') return fail(res, 404, 'Photo introuvable');
+      throw error;
+    }
+    if (!stat.isFile()) return fail(res, 404, 'Photo introuvable');
+
+    const config = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig()));
+    let removedReferences = 0;
+    config.tabs.forEach((tab) => {
+      if (tab.type !== 'photo') return;
+      const kept = tab.photos.filter((photo) => photoReferenceName(photo.src) !== name);
+      removedReferences += tab.photos.length - kept.length;
+      tab.photos = kept;
+    });
+    if (removedReferences) createDataBackup();
+
+    fs.unlinkSync(target);
+    if (removedReferences) {
+      try {
+        writeJSON(CONFIG_FILE, config);
+      } catch (error) {
+        console.error('[suppression photo] Impossible de mettre à jour la configuration :', error);
+        return fail(res, 500, 'Photo supprimée, mais impossible de mettre à jour les galeries configurées.');
+      }
+    }
+    return json(res, 200, { ok: true, removedReferences });
   }
 
   if (p === '/api/youtube/jobs' && req.method === 'GET') {
