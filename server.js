@@ -941,7 +941,8 @@ async function runYoutubeJob(job, tools) {
       '--progress',
       '--no-part',
       '--write-info-json',
-      '-f', 'bv*[vcodec^=av01]+ba/b',
+      '--js-runtimes', 'node',
+      '-f', 'bv*+ba/b',
       '-o', outputTemplate
     ];
     if (tools.ffmpeg) {
