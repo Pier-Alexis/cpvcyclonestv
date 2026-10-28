@@ -888,7 +888,7 @@ function av1Encoder(ffmpeg) {
     if (/\blibsvtav1\b/.test(out)) {
       av1EncoderCache = { name: 'libsvtav1', args: ['-preset', '8', '-crf', '32'] };
     } else if (/\blibaom-av1\b/.test(out)) {
-      av1EncoderCache = { name: 'libaom-av1', args: ['-cpu-used', '8', '-row-mt', '1', '-crf', '32', '-b:v', '0'] };
+      av1EncoderCache = { name: 'libaom-av1', args: ['-strict', '-2', '-cpu-used', '8', '-row-mt', '1', '-crf', '32', '-b:v', '0'] };
     }
   } catch (e) { /* aucun encodeur */ }
   return av1EncoderCache;
