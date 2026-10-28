@@ -428,6 +428,8 @@ input.err { border-color: var(--danger); }
 .yt-job.cancelled { opacity: .7; }
 .yt-progress { height: 8px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; margin: 10px 0 6px; }
 .yt-progress span { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
+.yt-progress span.indeterminate { width: 35%; animation: yt-progress-indeterminate 1.4s ease-in-out infinite alternate; }
+@keyframes yt-progress-indeterminate { from { transform: translateX(0); } to { transform: translateX(185%); } }
 .yt-job-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12.5px; }
 .yt-job-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--muted); font-size: 12px; }
 .yt-file { color: var(--text); word-break: break-all; }

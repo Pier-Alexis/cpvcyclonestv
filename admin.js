@@ -1658,6 +1658,7 @@ function renderYoutubeJobs(jobs) {
     const label = YT_STAGE_LABELS[job.stage] || job.stage;
     const title = job.name || job.title || job.url;
     const pct = clamp(Math.round(job.progress || 0), 0, 100);
+    const indeterminate = job.stage === 'transcoding' && job.progressMode === 'indeterminate';
     const cancel = active
       ? '<button class="btn small danger" type="button" data-yt-cancel="' + esc(job.id) + '">Annuler</button>'
       : '';
@@ -1666,8 +1667,8 @@ function renderYoutubeJobs(jobs) {
     return '<article class="yt-job ' + esc(job.stage) + '">' +
       '<div class="yt-job-head"><strong>' + esc(title) + '</strong>' +
         '<span class="yt-stage">' + esc(label) + '</span>' + cancel + '</div>' +
-      '<div class="yt-progress"><span style="width:' + pct + '%"></span></div>' +
-      '<div class="yt-job-meta"><span>' + esc(job.message || '') + '</span><span>' + pct + ' %</span></div>' +
+      '<div class="yt-progress"><span' + (indeterminate ? ' class="indeterminate"' : ' style="width:' + pct + '%"') + '></span></div>' +
+      '<div class="yt-job-meta"><span>' + esc(job.message || '') + '</span><span>' + (indeterminate ? 'En cours' : pct + ' %') + '</span></div>' +
       '<div class="yt-job-foot"><span>' + esc(folder) + '</span>' + file + '</div>' +
     '</article>';
   }).join('');

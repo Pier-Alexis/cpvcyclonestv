@@ -927,13 +927,26 @@ function probeCodec(ffprobe, file) {
 
 function probeDuration(ffprobe, file) {
   try {
-    const duration = Number(execFileSync(ffprobe, [
-      '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file
-    ], { encoding: 'utf8', windowsHide: true, timeout: 30000 }).trim());
-    return Number.isFinite(duration) && duration > 0 ? duration : 0;
+    const output = execFileSync(ffprobe, [
+      '-v', 'error', '-show_entries', 'format=duration:stream=duration', '-of', 'json', file
+    ], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+    const probe = JSON.parse(output);
+    const durations = [probe.format && probe.format.duration]
+      .concat((probe.streams || []).map((stream) => stream.duration))
+      .map(Number)
+      .filter((duration) => Number.isFinite(duration) && duration > 0);
+    return durations.length ? Math.max(...durations) : 0;
   } catch (e) {
     return 0;
   }
+}
+
+function formatMediaTime(seconds) {
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainder = total % 60;
+  return [hours, minutes, remainder].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
 function processError(result, label) {
@@ -1029,6 +1042,7 @@ async function runYoutubeJob(job, tools) {
       if (!encoder) throw new Error('Aucun encodeur AV1 disponible dans ffmpeg (libsvtav1 ou libaom-av1 requis).');
       job.stage = 'transcoding';
       job.progress = 85;
+      job.progressMode = duration ? 'determinate' : 'indeterminate';
       job.message = 'Conversion AV1 en cours…';
       const transcode = await spawnJobProcess(job, tools.ffmpeg, [
         '-y', '-hide_banner', '-loglevel', 'error', '-progress', 'pipe:1', '-nostats', '-i', downloaded,
@@ -1036,7 +1050,6 @@ async function runYoutubeJob(job, tools) {
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k',
         '-movflags', '+faststart', finalFile
       ], (line) => {
-        if (!duration) return;
         let elapsed = 0;
         const time = /^out_time_(?:us|ms)=(\d+)$/.exec(line);
         const formattedTime = /^out_time=(\d+):(\d+):(\d+(?:\.\d+)?)$/.exec(line);
@@ -1044,6 +1057,10 @@ async function runYoutubeJob(job, tools) {
         else if (formattedTime) {
           elapsed = Number(formattedTime[1]) * 3600 + Number(formattedTime[2]) * 60 + Number(formattedTime[3]);
         } else {
+          return;
+        }
+        if (!duration) {
+          job.message = 'Conversion AV1 — ' + formatMediaTime(elapsed) + ' traité';
           return;
         }
         const ratio = Math.max(0, Math.min(1, elapsed / duration));
@@ -1064,6 +1081,7 @@ async function runYoutubeJob(job, tools) {
     job.tabName = job.name || title;
     job.stage = 'done';
     job.progress = 100;
+    job.progressMode = 'determinate';
     job.message = 'Vidéo ajoutée à la configuration.';
     job.finishedAt = Date.now();
     console.log('[YouTube] Terminé :', target);
@@ -1087,6 +1105,7 @@ function publicYoutubeJob(job) {
     folderId: job.folderId,
     stage: job.stage,
     progress: job.progress,
+    progressMode: job.progressMode,
     message: job.message,
     fileName: job.fileName,
     tabName: job.tabName,
