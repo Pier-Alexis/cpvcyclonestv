@@ -756,7 +756,8 @@ const youtubeJobs = new Map();
 const YOUTUBE_MAX_ACTIVE = 2;
 const YOUTUBE_STAGES_ACTIVE = new Set(['preparing', 'downloading', 'merging', 'transcoding']);
 let youtubeToolsCache = { at: 0, value: null };
-let av1EncoderCache;
+const av1EncoderCache = new Map();
+const ffmpegHelpCache = new Map();
 
 function findTool(name, versionArgs) {
   const custom = process.env[name.toUpperCase().replace(/-/g, '_') + '_PATH'];
@@ -780,6 +781,34 @@ function youtubeTools() {
   };
   youtubeToolsCache = { at: now, value };
   return value;
+}
+
+function ffmpegHelp(ffmpeg, target) {
+  const key = ffmpeg + '\0' + target;
+  if (ffmpegHelpCache.has(key)) return ffmpegHelpCache.get(key);
+  let output = '';
+  try {
+    output = execFileSync(ffmpeg, ['-hide_banner', '-h', target], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 30000,
+      maxBuffer: 8 * 1024 * 1024
+    });
+  } catch (error) {
+    output = [error.stdout, error.stderr].filter(Boolean).join('\n');
+  }
+  if (!output.trim()) throw new Error('Impossible de lire les options FFmpeg (' + target + ').');
+  ffmpegHelpCache.set(key, output);
+  return output;
+}
+
+function ffmpegSupports(help, option) {
+  const escaped = option.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^\\s*' + escaped + '(?:\\s|$)', 'm').test(help);
+}
+
+function ffmpegGlobalHelp(ffmpeg) {
+  return ffmpegHelp(ffmpeg, 'full');
 }
 
 function normalizeYoutubeUrl(value) {
@@ -919,17 +948,36 @@ function spawnJobProcess(job, command, args, onLine) {
 }
 
 function av1Encoder(ffmpeg) {
-  if (av1EncoderCache !== undefined) return av1EncoderCache;
-  av1EncoderCache = null;
+  if (av1EncoderCache.has(ffmpeg)) return av1EncoderCache.get(ffmpeg);
+  let out;
   try {
-    const out = execFileSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
-    if (/\blibsvtav1\b/.test(out)) {
-      av1EncoderCache = { name: 'libsvtav1', args: ['-preset', '8', '-crf', '32'] };
-    } else if (/\blibaom-av1\b/.test(out)) {
-      av1EncoderCache = { name: 'libaom-av1', args: ['-strict', '-2', '-cpu-used', '8', '-row-mt', '1', '-crf', '32', '-b:v', '0'] };
-    }
-  } catch (e) { /* aucun encodeur */ }
-  return av1EncoderCache;
+    out = execFileSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+  } catch (error) {
+    av1EncoderCache.set(ffmpeg, null);
+    return null;
+  }
+  if (/\blibsvtav1\b/.test(out)) {
+    const help = ffmpegHelp(ffmpeg, 'encoder=libsvtav1');
+    const args = [];
+    if (ffmpegSupports(help, '-preset')) args.push('-preset', '8');
+    if (ffmpegSupports(help, '-crf')) args.push('-crf', '32');
+    const encoder = { name: 'libsvtav1', args };
+    av1EncoderCache.set(ffmpeg, encoder);
+    return encoder;
+  }
+  if (/\blibaom-av1\b/.test(out)) {
+    const help = ffmpegHelp(ffmpeg, 'encoder=libaom-av1');
+    const args = [];
+    if (ffmpegSupports(help, '-cpu-used')) args.push('-cpu-used', '8');
+    if (ffmpegSupports(help, '-row-mt')) args.push('-row-mt', '1');
+    if (ffmpegSupports(help, '-crf')) args.push('-crf', '32');
+    args.push('-b:v', '0');
+    const encoder = { name: 'libaom-av1', args };
+    av1EncoderCache.set(ffmpeg, encoder);
+    return encoder;
+  }
+  av1EncoderCache.set(ffmpeg, null);
+  return null;
 }
 
 function probeCodec(ffprobe, file) {
@@ -1069,14 +1117,18 @@ async function runYoutubeJob(job, tools) {
     const probedDuration = tools.ffprobe ? probeDuration(tools.ffprobe, downloaded) : 0;
     const duration = probedDuration || (Number.isFinite(infoDuration) && infoDuration > 0 ? infoDuration : 0);
     const finalFile = path.join(YOUTUBE_DIR, baseId + '-final.mp4');
+    const globalHelp = ffmpegGlobalHelp(tools.ffmpeg);
+    const mp4OutputOptions = ffmpegSupports(globalHelp, '-movflags')
+      ? ['-movflags', '+faststart']
+      : [];
     if (codec === 'av1') {
       job.stage = 'merging';
       job.progress = 88;
       job.message = 'AV1 natif détecté. Remuxage en MP4…';
       const remux = await spawnJobProcess(job, tools.ffmpeg, [
-        '-y', '-hide_banner', '-loglevel', 'warning', '-xerror', '-i', downloaded,
+        '-y', '-hide_banner', '-loglevel', 'warning', '-i', downloaded,
         '-map', '0:v:0', '-map', '0:a?', '-c:v', 'copy',
-        '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', finalFile
+        '-c:a', 'aac', '-b:a', '128k', ...mp4OutputOptions, finalFile
       ], null);
       if (job.cancelled) return finishCancelled(job);
       if (remux.code !== 0 || !fs.existsSync(finalFile)) throw new Error(processError(remux, 'ffmpeg (remux)'));
@@ -1089,20 +1141,29 @@ async function runYoutubeJob(job, tools) {
       job.message = 'Conversion AV1 en cours…';
       let elapsed = 0;
       let speed = '';
+      const progressArgs = [];
+      if (ffmpegSupports(globalHelp, '-progress')) {
+        progressArgs.push('-progress', 'pipe:1');
+        if (ffmpegSupports(globalHelp, '-nostats')) progressArgs.push('-nostats');
+      } else if (ffmpegSupports(globalHelp, '-stats')) {
+        progressArgs.push('-stats');
+      }
       const transcode = await spawnJobProcess(job, tools.ffmpeg, [
-        '-y', '-hide_banner', '-loglevel', 'warning', '-xerror',
-        '-progress', 'pipe:1', '-stats_period', '1', '-nostats', '-i', downloaded,
+        '-y', '-hide_banner', '-loglevel', 'warning', ...progressArgs, '-i', downloaded,
         '-map', '0:v:0', '-map', '0:a?', '-c:v', encoder.name, ...encoder.args,
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k',
-        '-movflags', '+faststart', finalFile
+        ...mp4OutputOptions, finalFile
       ], (line) => {
         const time = /^out_time_(?:us|ms)=(\d+)$/.exec(line);
         const formattedTime = /^out_time=(\d+):(\d+):(\d+(?:\.\d+)?)$/.exec(line);
+        const statsTime = /(?:^|\s)time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line);
         if (time) elapsed = Number(time[1]) / 1000000;
         else if (formattedTime) {
           elapsed = Number(formattedTime[1]) * 3600 + Number(formattedTime[2]) * 60 + Number(formattedTime[3]);
+        } else if (statsTime) {
+          elapsed = Number(statsTime[1]) * 3600 + Number(statsTime[2]) * 60 + Number(statsTime[3]);
         } else {
-          const speedMatch = /^speed=\s*([0-9.]+x)$/.exec(line);
+          const speedMatch = /(?:^|\s)speed=\s*([0-9.]+x)/.exec(line);
           if (!speedMatch) return;
           speed = speedMatch[1];
         }
