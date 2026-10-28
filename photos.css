@@ -99,6 +99,17 @@ h1 { margin: 0; font-size: 24px; line-height: 1.2; }
   color: var(--text);
 }
 .photo-search input:focus { border-color: var(--accent); }
+.folder-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 2px 12px; color: var(--muted); }
+.folder-crumb { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); cursor: pointer; }
+.folder-crumb:hover, .folder-crumb[aria-current="page"] { border-color: var(--accent); color: #fff; }
+.folder-crumb.current { font-weight: 700; }
+.folder-separator { color: var(--muted); }
+.folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: 10px; margin-bottom: 14px; }
+.folder-card { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px 12px; padding: 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text); text-align: left; cursor: pointer; box-shadow: var(--shadow); }
+.folder-card:hover { border-color: var(--accent); background: var(--panel2); }
+.folder-icon { grid-row: span 2; padding: 7px 9px; border-radius: 7px; background: var(--panel2); color: var(--accent); font-size: 11px; font-weight: 700; }
+.folder-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-card small { color: var(--muted); }
 .gallery-meta { display: flex; justify-content: space-between; gap: 12px; margin: 0 2px 10px; color: var(--muted); font-size: 12.5px; }
 .gallery-meta p { margin: 0; }
 .gallery-meta p.error { color: #ff929b; }
@@ -118,7 +129,7 @@ h1 { margin: 0; font-size: 24px; line-height: 1.2; }
   transition: border-color .15s ease, background-color .15s ease;
 }
 .photo-card:hover { border-color: var(--accent); background: var(--panel2); }
-.photo-card:focus-visible, .dialog-close:focus-visible, .dialog-caption a:focus-visible, .photo-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.photo-card:focus-visible, .folder-card:focus-visible, .folder-crumb:focus-visible, .dialog-close:focus-visible, .dialog-caption a:focus-visible, .photo-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .photo-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
 .photo-card span { display: block; overflow: hidden; padding: 9px 12px 10px; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .empty-gallery { grid-column: 1 / -1; margin: 0; padding: 32px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--muted); text-align: center; }

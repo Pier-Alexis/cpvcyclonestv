@@ -14,7 +14,7 @@ Dans **Fichiers vidéo**, l’admin peut envoyer plusieurs vidéos, rechercher e
 
 ## Photos
 
-Dans **Photos**, l’admin peut téléverser des images, les prévisualiser, les ajouter aux onglets photo ou les supprimer. La suppression retire aussi la photo des onglets configurés et crée une sauvegarde des données avant de modifier la configuration. Les images sont stockées dans `photos/`. La page `/photos.html` présente toute la bibliothèque avec recherche et aperçu agrandi; les albums configurés restent accessibles depuis les onglets du viewer.
+Dans **Photos**, l’admin peut créer des dossiers et sous-dossiers, y téléverser ou déplacer des images, les prévisualiser, les ajouter aux onglets photo ou les supprimer. Un déplacement met à jour les références des onglets configurés; la suppression les retire également. Une sauvegarde des données est créée avant ces modifications de configuration. Les images sont stockées dans `photos/`. La page `/photos.html` permet de parcourir les dossiers et présente les images avec recherche et aperçu agrandi; les albums configurés restent accessibles depuis les onglets du viewer.
 
 L’export/import JSON existant concerne la configuration du viewer. **Télécharger la sauvegarde des données** exporte en plus les fiches d’athlètes et leurs justificatifs de mot de passe hachés; les fichiers vidéo eux-mêmes ne sont pas inclus.
 

@@ -13,6 +13,7 @@ let pass = '';
 let config = null;
 let videoFiles = [];
 let photoFiles = [];
+let photoFolders = [];
 let athletes = [];
 const ACTION_LOG_KEY = 'cpvViewer:actions';
 const VIDEO_ERROR_KEY = 'cpvViewer:videoErrors';
@@ -178,6 +179,7 @@ async function showApp() {
     config = cfg;
     videoFiles = vid.videos || [];
     photoFiles = photosData.photos || [];
+    photoFolders = photosData.folders || [];
     athletes = athleteData.athletes || [];
     config.folders = mergeDiscoveredFolders(config.folders || DEFAULT_FOLDERS, videoFiles.map((file) => file.name));
     render();
@@ -197,6 +199,7 @@ function render() {
   renderFolderTree();
   renderTabs();
   renderVideoList();
+  renderPhotoFolderOptions();
   renderPhotoList();
   renderPhotoTargetOptions();
   renderAthletes();
@@ -854,6 +857,16 @@ function photoSrc(name) {
   return '/photos/' + name.split('/').map(encodeURIComponent).join('/');
 }
 
+function photoNameFromSrc(src) {
+  const match = /^(?:\.\/)?\/?photos\/(.+)$/i.exec(String(src || '').trim());
+  if (!match) return '';
+  try {
+    return match[1].split('/').map((part) => decodeURIComponent(part)).join('/');
+  } catch (error) {
+    return '';
+  }
+}
+
 function photoOptions(selectedSrc) {
   let html = '<option value="">Choisir une photo…</option>';
   const paths = photoFiles.map((photo) => photoSrc(photo.name));
@@ -945,13 +958,34 @@ function renderPhotoTargetOptions() {
   if (Array.from(select.options).some((option) => option.value === current)) select.value = current;
 }
 
+function renderPhotoFolderOptions() {
+  const destination = $('#photoFolderDestination');
+  const filter = $('#photoFolderFilter');
+  if (!destination || !filter) return;
+  const currentDestination = destination.value;
+  const currentFilter = filter.value;
+  const options = photoFolders.map((folder) =>
+    '<option value="' + esc(folder) + '">' + esc(folder.replace(/\//g, ' / ')) + '</option>'
+  ).join('');
+  destination.innerHTML = '<option value="">Racine de photos/</option>' + options;
+  filter.innerHTML = '<option value="*">Tous les dossiers</option><option value="">Racine de photos/</option>' + options;
+  if (photoFolders.includes(currentDestination)) destination.value = currentDestination;
+  if (currentFilter === '*' || currentFilter === '' || photoFolders.includes(currentFilter)) filter.value = currentFilter;
+}
+
 function renderPhotoList() {
   const list = $('#photoList');
   if (!list) return;
   list.replaceChildren();
   const query = ($('#photoSearch')?.value || '').trim().toLocaleLowerCase();
   const order = $('#photoSort')?.value || 'newest';
-  const files = photoFiles.filter((photo) => !query || photo.name.toLocaleLowerCase().includes(query)).slice();
+  const folderFilter = $('#photoFolderFilter');
+  const selectedFolder = folderFilter ? folderFilter.value : '*';
+  const files = photoFiles.filter((photo) => {
+    const folder = photo.name.includes('/') ? photo.name.slice(0, photo.name.lastIndexOf('/')) : '';
+    return (selectedFolder === '*' || folder === selectedFolder) &&
+      (!query || photo.name.toLocaleLowerCase().includes(query));
+  }).slice();
   files.sort((a, b) => {
     if (order === 'name') return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' });
     if (order === 'oldest') return a.mtime - b.mtime;
@@ -961,7 +995,9 @@ function renderPhotoList() {
   if (!files.length) {
     const empty = document.createElement('li');
     empty.className = 'empty';
-    empty.textContent = photoFiles.length ? 'Aucune photo ne correspond à cette recherche.' : 'Aucune photo envoyée pour le moment.';
+    empty.textContent = photoFiles.length
+      ? query ? 'Aucune photo ne correspond à cette recherche.' : 'Aucune photo dans ce dossier.'
+      : 'Aucune photo envoyée pour le moment.';
     list.appendChild(empty);
     return;
   }
@@ -996,6 +1032,16 @@ function renderPhotoList() {
     remove.dataset.photoDelete = photo.name;
     const actions = document.createElement('div');
     actions.className = 'photo-file-actions';
+    const destination = $('#photoFolderDestination')?.value || '';
+    const currentFolder = photo.name.includes('/') ? photo.name.slice(0, photo.name.lastIndexOf('/')) : '';
+    if (destination !== currentFolder) {
+      const move = document.createElement('button');
+      move.className = 'btn small';
+      move.type = 'button';
+      move.textContent = 'Déplacer ici';
+      move.dataset.photoMove = photo.name;
+      actions.appendChild(move);
+    }
     actions.append(add, view, remove);
     item.append(image, name, size, actions);
     list.appendChild(item);
@@ -1006,6 +1052,8 @@ async function refreshPhotos() {
   try {
     const data = await api('/api/photos');
     photoFiles = data.photos || [];
+    photoFolders = data.folders || [];
+    renderPhotoFolderOptions();
     renderPhotoList();
     $$('.photo-src', tabsEditor).forEach((select) => {
       const current = select.value;
@@ -1021,6 +1069,7 @@ async function uploadPhoto(incomingFiles) {
   const input = $('#photoUploadInput');
   const files = Array.from(incomingFiles || input.files || []);
   if (!files.length) return;
+  const destination = $('#photoFolderDestination')?.value || '';
   const progress = $('#photoUploadProg');
   const message = $('#photoUploadMsg');
   progress.hidden = false;
@@ -1035,7 +1084,7 @@ async function uploadPhoto(incomingFiles) {
       continue;
     }
     try {
-      await uploadOnePhoto(file, (loaded) => {
+      await uploadOnePhoto(file, destination, (loaded) => {
         progress.value = Math.min(100, loaded / Math.max(file.size, 1) * 100);
       });
       uploaded += 1;
@@ -1051,10 +1100,10 @@ async function uploadPhoto(incomingFiles) {
   toast(errors.length ? uploaded + ' photo(s) envoyée(s), ' + errors.length + ' échec(s) : ' + errors[0] : uploaded + ' photo(s) envoyée(s).', errors.length ? 'err' : 'ok');
 }
 
-function uploadOnePhoto(file, onProgress) {
+function uploadOnePhoto(file, folder, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/upload/photo?name=' + encodeURIComponent(file.name));
+    xhr.open('POST', '/api/upload/photo?name=' + encodeURIComponent(file.name) + '&folder=' + encodeURIComponent(folder));
     xhr.setRequestHeader('x-admin-pass', pass);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.upload.onprogress = (event) => {
@@ -1213,7 +1262,60 @@ function bindVideoList() {
   if (photoSearch) photoSearch.addEventListener('input', renderPhotoList);
   const photoSort = $('#photoSort');
   if (photoSort) photoSort.addEventListener('change', renderPhotoList);
+  const photoFolderFilter = $('#photoFolderFilter');
+  if (photoFolderFilter) photoFolderFilter.addEventListener('change', renderPhotoList);
+  const photoFolderDestination = $('#photoFolderDestination');
+  if (photoFolderDestination) photoFolderDestination.addEventListener('change', renderPhotoList);
+  $('#photoCreateFolderBtn').addEventListener('click', async () => {
+    const name = prompt('Nom du nouveau dossier :');
+    if (name === null) return;
+    try {
+      const result = await api('/api/photos/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent: photoFolderDestination.value, name })
+      });
+      await refreshPhotos();
+      photoFolderDestination.value = result.folder;
+      photoFolderFilter.value = result.folder;
+      renderPhotoList();
+      toast('Dossier créé : ' + result.folder, 'ok');
+    } catch (error) {
+      toast('Impossible de créer le dossier : ' + error.message, 'err');
+    }
+  });
   $('#photoList').addEventListener('click', async (event) => {
+    const move = event.target.closest('[data-photo-move]');
+    if (move) {
+      const source = move.dataset.photoMove;
+      const folder = photoFolderDestination.value;
+      const wasDirty = $('#configState').classList.contains('dirty');
+      move.disabled = true;
+      try {
+        const result = await api('/api/photos/move', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, folder })
+        });
+        await refreshPhotos();
+        const newSrc = photoSrc(result.name);
+        $$('.photo-src', tabsEditor).forEach((select) => {
+          if (photoNameFromSrc(select.value) === source) select.value = newSrc;
+        });
+        config.tabs.forEach((tab) => {
+          if (tab.type !== 'photo') return;
+          tab.photos.forEach((photo) => {
+            if (photoNameFromSrc(photo.src) === source) photo.src = newSrc;
+          });
+        });
+        setConfigDirty(wasDirty);
+        toast('Photo déplacée : ' + result.name, 'ok');
+      } catch (error) {
+        move.disabled = false;
+        toast('Impossible de déplacer la photo : ' + error.message, 'err');
+      }
+      return;
+    }
     const remove = event.target.closest('[data-photo-delete]');
     if (remove) {
       const name = remove.dataset.photoDelete;

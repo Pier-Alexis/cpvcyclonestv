@@ -362,6 +362,9 @@ input.err { border-color: var(--danger); }
 .photo-heading-actions, .photo-file-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .photo-file-actions { margin-left: auto; }
 .photo-file-actions .btn { flex: 0 0 auto; }
+.photo-folder-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 14px 0; }
+.photo-folder-tools label { min-width: 210px; flex: 1 1 250px; }
+.photo-folder-tools > .btn { flex: 0 0 auto; }
 .photo-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.1fr) minmax(140px, .8fr) minmax(150px, 1fr) auto;

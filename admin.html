@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <title>CyclonesTV</title>
-<link rel="stylesheet" href="admin.css?v=17">
+<link rel="stylesheet" href="admin.css?v=18">
 <link rel="icon" type="image/png" href="logo.png">
 </head>
 <body data-accent="#22d3ee">
@@ -165,7 +165,7 @@
       <div class="card-head">
         <div>
           <h2>Photos</h2>
-          <p class="muted-note">Envoyez des photos dans <code>photos/</code> pour les utiliser dans un onglet « Photos ».</p>
+          <p class="muted-note">Créez des dossiers pour organiser les photos, puis choisissez leur destination avant l’envoi ou le déplacement. Les dossiers sont aussi parcourables dans la galerie publique.</p>
         </div>
         <div class="photo-heading-actions">
           <a class="btn small" href="/photos.html" target="_blank" rel="noopener">Voir la galerie</a>
@@ -178,6 +178,15 @@
         <input type="file" id="photoUploadInput" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.svg" multiple hidden>
         <progress id="photoUploadProg" max="100" value="0" hidden></progress>
         <span id="photoUploadMsg"></span>
+      </div>
+      <div class="photo-folder-tools">
+        <label>Dossier de destination (envoi, déplacement et création)
+          <select id="photoFolderDestination"><option value="">Racine de photos/</option></select>
+        </label>
+        <button class="btn small" id="photoCreateFolderBtn" type="button">+ Créer un dossier</button>
+        <label>Afficher
+          <select id="photoFolderFilter"><option value="*">Tous les dossiers</option><option value="">Racine de photos/</option></select>
+        </label>
       </div>
       <div class="video-tools">
         <label>Rechercher<input id="photoSearch" type="search" placeholder="Nom…" autocomplete="off"></label>
@@ -285,6 +294,6 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="admin.js?v=22"></script>
+<script src="admin.js?v=23"></script>
 </body>
 </html>

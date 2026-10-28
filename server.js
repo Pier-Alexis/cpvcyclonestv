@@ -578,6 +578,13 @@ function validPhotoName(value) {
   ) && PHOTO_EXT.has(path.extname(value).toLowerCase());
 }
 
+function validPhotoDirectory(value) {
+  if (typeof value !== 'string' || value.includes('\\')) return false;
+  return !value || value.split('/').every((part) =>
+    part && part !== '.' && part !== '..' && !/[\x00-\x1f<>:"|?*]/.test(part)
+  );
+}
+
 function photoReferenceName(value) {
   if (typeof value !== 'string') return '';
   const match = /^(?:\.\/)?\/?photos\/(.+)$/i.exec(value.trim());
@@ -727,6 +734,20 @@ function listPhotos() {
   };
   visit(PHOTOS_DIR);
   return photos.sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name));
+}
+
+function listPhotoFolders() {
+  const folders = [];
+  const visit = (directory, relative) => {
+    fs.readdirSync(directory, { withFileTypes: true }).forEach((entry) => {
+      if (!entry.isDirectory()) return;
+      const name = relative ? relative + '/' + entry.name : entry.name;
+      folders.push(name);
+      visit(path.join(directory, entry.name), name);
+    });
+  };
+  visit(PHOTOS_DIR, '');
+  return folders.sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
 }
 
 /* ---------- YouTube / direct ---------- */
@@ -1221,7 +1242,96 @@ async function handleApi(req, res, url) {
   }
 
   if (p === '/api/photos' && req.method === 'GET') {
-    return json(res, 200, { ok: true, photos: listPhotos() });
+    return json(res, 200, { ok: true, photos: listPhotos(), folders: listPhotoFolders() });
+  }
+
+  if (p === '/api/photos/folders' && req.method === 'POST') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'Requête invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const parent = typeof body.parent === 'string' ? body.parent.trim() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (!validPhotoDirectory(parent) || (parent && parent.split('/').length >= 8)) return fail(res, 400, 'Chemin de dossier invalide');
+    if (!name || name.length > 100 || name === '.' || name === '..' || /[\/\\\x00-\x1f<>:"|?*]/.test(name)) {
+      return fail(res, 400, 'Nom de dossier invalide');
+    }
+    const parentPath = safeJoin(PHOTOS_DIR, parent);
+    if (!parentPath || !fs.existsSync(parentPath) || !fs.statSync(parentPath).isDirectory()) {
+      return fail(res, 400, 'Le dossier parent n’existe pas');
+    }
+    const folder = parent ? parent + '/' + name : name;
+    const target = safeJoin(PHOTOS_DIR, folder);
+    if (!target) return fail(res, 400, 'Chemin de dossier invalide');
+    try {
+      fs.mkdirSync(target);
+    } catch (error) {
+      if (error.code === 'EEXIST') return fail(res, 409, 'Un dossier porte déjà ce nom');
+      throw error;
+    }
+    return json(res, 201, { ok: true, folder });
+  }
+
+  if (p === '/api/photos/move' && req.method === 'PUT') {
+    if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
+    let body;
+    try {
+      body = JSON.parse((await readBody(req, 16 * 1024)).toString('utf8'));
+    } catch (e) {
+      return fail(res, 400, 'Requête invalide');
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const source = typeof body.source === 'string' ? body.source.trim() : '';
+    const folder = typeof body.folder === 'string' ? body.folder.trim() : '';
+    if (!validPhotoName(source) || !validPhotoDirectory(folder) || (folder && folder.split('/').length > 8)) {
+      return fail(res, 400, 'Chemin de photo invalide');
+    }
+    const sourcePath = safeJoin(PHOTOS_DIR, source);
+    const destinationName = folder ? folder + '/' + path.basename(source) : path.basename(source);
+    const destinationPath = safeJoin(PHOTOS_DIR, destinationName);
+    const folderPath = safeJoin(PHOTOS_DIR, folder);
+    if (!sourcePath || !destinationPath || !folderPath) return fail(res, 400, 'Chemin de photo invalide');
+    let sourceStat;
+    try {
+      sourceStat = fs.lstatSync(sourcePath);
+    } catch (error) {
+      if (error.code === 'ENOENT') return fail(res, 404, 'Photo introuvable');
+      throw error;
+    }
+    if (!sourceStat.isFile()) return fail(res, 404, 'Photo introuvable');
+    if (!fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
+      return fail(res, 400, 'Le dossier de destination n’existe pas');
+    }
+    if (source === destinationName) return json(res, 200, { ok: true, name: destinationName });
+    if (fs.existsSync(destinationPath)) return fail(res, 409, 'Une photo porte déjà ce nom dans ce dossier');
+
+    const config = sanitizeConfig(readJSON(CONFIG_FILE, defaultConfig()));
+    let updatedReferences = 0;
+    config.tabs.forEach((tab) => {
+      if (tab.type !== 'photo') return;
+      tab.photos.forEach((photo) => {
+        if (photoReferenceName(photo.src) !== source) return;
+        photo.src = '/photos/' + destinationName.split('/').map(encodeURIComponent).join('/');
+        updatedReferences += 1;
+      });
+    });
+    if (updatedReferences) createDataBackup();
+    try {
+      fs.renameSync(sourcePath, destinationPath);
+      if (updatedReferences) writeJSON(CONFIG_FILE, config);
+    } catch (error) {
+      if (fs.existsSync(destinationPath) && !fs.existsSync(sourcePath)) {
+        try { fs.renameSync(destinationPath, sourcePath); } catch (rollbackError) {
+          console.error('[déplacement photo] Échec du retour arrière :', rollbackError);
+        }
+      }
+      throw error;
+    }
+    return json(res, 200, { ok: true, name: destinationName, updatedReferences });
   }
 
   if (p === '/api/photos' && req.method === 'DELETE') {
@@ -1454,12 +1564,18 @@ async function handleApi(req, res, url) {
   if (p === '/api/upload/photo' && req.method === 'POST') {
     if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
     const raw = (url.searchParams.get('name') || '').trim();
+    const folder = (url.searchParams.get('folder') || '').trim();
     if (!raw) return fail(res, 400, 'Nom de fichier invalide');
     if (raw.includes('..') || raw.includes('/') || raw.includes('\\')) return fail(res, 400, 'Nom de fichier invalide');
     const name = path.basename(raw);
     const ext = path.extname(name).toLowerCase();
     if (!validPhotoName(name)) return fail(res, 400, PHOTO_EXT.has(ext) ? 'Nom de fichier invalide' : 'Extension non supportée : ' + ext);
-    const target = safeJoin(PHOTOS_DIR, name);
+    if (!validPhotoDirectory(folder) || (folder && folder.split('/').length > 8)) return fail(res, 400, 'Chemin de dossier invalide');
+    const folderPath = safeJoin(PHOTOS_DIR, folder);
+    if (!folderPath || !fs.existsSync(folderPath) || !fs.statSync(folderPath).isDirectory()) {
+      return fail(res, 400, 'Le dossier de destination n’existe pas');
+    }
+    const target = safeJoin(PHOTOS_DIR, folder ? folder + '/' + name : name);
     if (!target) return fail(res, 400, 'Chemin invalide');
     const ws = fs.createWriteStream(target, { flags: 'wx' });
     let size = 0;
