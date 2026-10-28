@@ -835,10 +835,9 @@ function findJobFile(baseId) {
   return files[0] || null;
 }
 
-function readJobTitle(baseId) {
+function readJobInfo(baseId) {
   const infoFile = path.join(YOUTUBE_DIR, baseId + '.info.json');
-  const info = readJSON(infoFile, null);
-  return info && typeof info.title === 'string' ? info.title.trim() : '';
+  return readJSON(infoFile, null);
 }
 
 function cleanupJobFiles(baseId, keep) {
@@ -926,6 +925,17 @@ function probeCodec(ffprobe, file) {
   }
 }
 
+function probeDuration(ffprobe, file) {
+  try {
+    const duration = Number(execFileSync(ffprobe, [
+      '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file
+    ], { encoding: 'utf8', windowsHide: true, timeout: 30000 }).trim());
+    return Number.isFinite(duration) && duration > 0 ? duration : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 function processError(result, label) {
   const detail = String(result.stderr || result.stdout || '').trim().split(/\r?\n/).filter(Boolean).slice(-3).join(' ');
   return label + ' a échoué' + (result.code != null ? ' (code ' + result.code + ')' : '') + (detail ? ' : ' + detail : '');
@@ -993,10 +1003,15 @@ async function runYoutubeJob(job, tools) {
     job.message = 'Fichier téléchargé. Analyse du codec…';
     const downloaded = findJobFile(baseId);
     if (!downloaded) throw new Error('Le fichier téléchargé est introuvable.');
-    const title = readJobTitle(baseId) || job.name || 'Vidéo YouTube';
+    const info = readJobInfo(baseId);
+    const title = (info && typeof info.title === 'string' ? info.title.trim() : '') || job.name || 'Vidéo YouTube';
     job.title = title;
 
     const codec = tools.ffprobe ? probeCodec(tools.ffprobe, downloaded) : '';
+    const infoDuration = Number(info && info.duration);
+    const duration = Number.isFinite(infoDuration) && infoDuration > 0
+      ? infoDuration
+      : tools.ffprobe ? probeDuration(tools.ffprobe, downloaded) : 0;
     const finalFile = path.join(YOUTUBE_DIR, baseId + '-final.mp4');
     if (codec === 'av1') {
       job.stage = 'merging';
@@ -1014,13 +1029,27 @@ async function runYoutubeJob(job, tools) {
       if (!encoder) throw new Error('Aucun encodeur AV1 disponible dans ffmpeg (libsvtav1 ou libaom-av1 requis).');
       job.stage = 'transcoding';
       job.progress = 85;
-      job.message = 'Conversion en AV1 avec ' + encoder.name + '… (peut prendre du temps)';
+      job.message = 'Conversion AV1 en cours…';
       const transcode = await spawnJobProcess(job, tools.ffmpeg, [
-        '-y', '-hide_banner', '-loglevel', 'error', '-i', downloaded,
+        '-y', '-hide_banner', '-loglevel', 'error', '-progress', 'pipe:1', '-nostats', '-i', downloaded,
         '-map', '0:v:0', '-map', '0:a?', '-c:v', encoder.name, ...encoder.args,
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k',
         '-movflags', '+faststart', finalFile
-      ], null);
+      ], (line) => {
+        if (!duration) return;
+        let elapsed = 0;
+        const time = /^out_time_(?:us|ms)=(\d+)$/.exec(line);
+        const formattedTime = /^out_time=(\d+):(\d+):(\d+(?:\.\d+)?)$/.exec(line);
+        if (time) elapsed = Number(time[1]) / 1000000;
+        else if (formattedTime) {
+          elapsed = Number(formattedTime[1]) * 3600 + Number(formattedTime[2]) * 60 + Number(formattedTime[3]);
+        } else {
+          return;
+        }
+        const ratio = Math.max(0, Math.min(1, elapsed / duration));
+        job.progress = Math.min(99, 85 + Math.floor(ratio * 14));
+        job.message = 'Conversion AV1 ' + Math.min(99, Math.round(ratio * 100)) + ' %';
+      });
       if (job.cancelled) return finishCancelled(job);
       if (transcode.code !== 0 || !fs.existsSync(finalFile)) throw new Error(processError(transcode, 'ffmpeg (AV1)'));
     }
