@@ -947,7 +947,7 @@ function spawnJobProcess(job, command, args, onLine) {
   });
 }
 
-function av1Encoder(ffmpeg) {
+function av1Encoder(ffmpeg, globalHelp) {
   if (av1EncoderCache.has(ffmpeg)) return av1EncoderCache.get(ffmpeg);
   let out;
   try {
@@ -971,6 +971,7 @@ function av1Encoder(ffmpeg) {
     if (ffmpegSupports(help, '-cpu-used')) args.push('-cpu-used', '8');
     if (ffmpegSupports(help, '-row-mt')) args.push('-row-mt', '1');
     if (ffmpegSupports(help, '-crf')) args.push('-crf', '32');
+    if (ffmpegSupports(globalHelp, '-strict')) args.push('-strict', '-2');
     args.push('-b:v', '0');
     const encoder = { name: 'libaom-av1', args };
     av1EncoderCache.set(ffmpeg, encoder);
@@ -1133,7 +1134,7 @@ async function runYoutubeJob(job, tools) {
       if (job.cancelled) return finishCancelled(job);
       if (remux.code !== 0 || !fs.existsSync(finalFile)) throw new Error(processError(remux, 'ffmpeg (remux)'));
     } else {
-      const encoder = av1Encoder(tools.ffmpeg);
+      const encoder = av1Encoder(tools.ffmpeg, globalHelp);
       if (!encoder) throw new Error('Aucun encodeur AV1 disponible dans ffmpeg (libsvtav1 ou libaom-av1 requis).');
       job.stage = 'transcoding';
       job.progress = 85;
