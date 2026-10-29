@@ -1688,11 +1688,17 @@ async function refreshYoutubeJobs() {
   const missing = [];
   if (!tools.ytDlp) missing.push('yt-dlp');
   if (!tools.ffmpeg) missing.push('ffmpeg');
+  if (!tools.jsRuntime) missing.push('Deno 2+ ou Node.js 20+');
+  else if (!tools.jsRuntimesSupported) missing.push('une version récente de yt-dlp');
+  if (tools.cookiesPathSet && !tools.cookiesConfigured) missing.push('un fichier YOUTUBE_COOKIES_PATH valide');
+  if (tools.cookiesPathSet && !tools.cookiesSupported) missing.push('une version de yt-dlp compatible avec les cookies');
   const info = $('#ytTools');
   if (info) {
-    info.textContent = data.available
-      ? 'yt-dlp et ffmpeg sont disponibles sur le serveur.'
-      : 'Outils manquants sur le serveur : ' + missing.join(', ') + '.';
+    const status = data.available
+      ? 'yt-dlp, ffmpeg et le runtime ' + tools.jsRuntime + ' sont disponibles.'
+      : 'Préparation impossible : ' + missing.join(', ') + ' requis ou mal configuré.';
+    const cookies = tools.cookiesConfigured ? ' Cookies YouTube configurés.' : '';
+    info.textContent = status + cookies;
     info.classList.toggle('err', !data.available);
   }
   const startBtn = $('#ytStart');

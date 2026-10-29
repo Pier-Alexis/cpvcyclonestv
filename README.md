@@ -12,6 +12,19 @@ Ouvrez `/admin.html` pour gérer le site. Changez le mot de passe administrateur
 
 Dans **Fichiers vidéo**, l’admin peut envoyer plusieurs vidéos, rechercher et trier le catalogue, sélectionner des fichiers, les déplacer vers un sous-dossier existant, les renommer ou les supprimer. Le déplacement et le renommage mettent aussi à jour les références des onglets et des qualités configurées. Les dossiers de stockage sont sous `videos/`.
 
+## Téléchargement YouTube
+
+Le téléchargement YouTube requiert une version récente de `yt-dlp`, `ffmpeg`, `ffprobe`, ainsi que Deno 2+ ou Node.js 20+ pour l’extraction JavaScript. Le panneau admin indique si ces prérequis sont détectés. Installez les outils dans le `PATH` du compte qui exécute le service; redémarrez le service après leur installation ou leur mise à jour.
+
+Certaines vidéos exigent une session YouTube. Dans ce cas, exportez les cookies d’un compte autorisé vers un fichier Netscape sur le serveur, hors du dossier du site, puis configurez le service avec `YOUTUBE_COOKIES_PATH` pointant vers ce fichier. Pour systemd, créez un override avec `sudo systemctl edit cpvcyclones` :
+
+```ini
+[Service]
+Environment="YOUTUBE_COOKIES_PATH=/home/acer/private/youtube-cookies.txt"
+```
+
+Le fichier doit être lisible uniquement par le compte du service (par exemple `chmod 600` et propriétaire `acer`). Les cookies donnent accès à la session : utilisez si possible un compte dédié, ne les commitez pas, ne les placez pas dans le dossier du site et ne les partagez pas. Après configuration, redémarrez avec `sudo systemctl restart cpvcyclones`. Les cookies expirent parfois et peuvent devoir être réexportés. La configuration ne contourne pas les restrictions de YouTube et seuls les contenus auxquels le compte a accès peuvent être téléchargés.
+
 ## Photos
 
 Dans **Photos**, l’admin peut créer des dossiers et sous-dossiers, y téléverser ou déplacer des images, les prévisualiser, les ajouter aux onglets photo ou les supprimer. Un déplacement met à jour les références des onglets configurés; la suppression les retire également. Une sauvegarde des données est créée avant ces modifications de configuration. Les images sont stockées dans `photos/`. La page `/photos.html` permet de parcourir les dossiers et présente les images avec recherche et aperçu agrandi; les albums configurés restent accessibles depuis les onglets du viewer.

@@ -756,6 +756,7 @@ const youtubeJobs = new Map();
 const YOUTUBE_MAX_ACTIVE = 2;
 const YOUTUBE_STAGES_ACTIVE = new Set(['preparing', 'downloading', 'merging', 'transcoding']);
 let youtubeToolsCache = { at: 0, value: null };
+let youtubeHelpCache = { command: '', value: '' };
 const av1EncoderCache = new Map();
 const ffmpegHelpCache = new Map();
 
@@ -774,13 +775,77 @@ function findTool(name, versionArgs) {
 function youtubeTools() {
   const now = Date.now();
   if (youtubeToolsCache.value && now - youtubeToolsCache.at < 60000) return youtubeToolsCache.value;
+  const ytdlp = findTool('yt-dlp', ['--version']);
+  const ytdlpHelp = ytdlp ? ytDlpHelp(ytdlp) : '';
   const value = {
-    ytdlp: findTool('yt-dlp', ['--version']),
+    ytdlp,
     ffmpeg: findTool('ffmpeg', ['-version']),
-    ffprobe: findTool('ffprobe', ['-version'])
+    ffprobe: findTool('ffprobe', ['-version']),
+    jsRuntime: detectYoutubeJsRuntime(),
+    supportsJsRuntimes: helpSupportsOption(ytdlpHelp, '--js-runtimes'),
+    supportsCookies: helpSupportsOption(ytdlpHelp, '--cookies')
   };
   youtubeToolsCache = { at: now, value };
   return value;
+}
+
+function ytDlpHelp(command) {
+  if (youtubeHelpCache.command === command) return youtubeHelpCache.value;
+  let output = '';
+  try {
+    output = execFileSync(command, ['--help'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 30000,
+      maxBuffer: 8 * 1024 * 1024
+    });
+  } catch (error) {
+    output = [error.stdout, error.stderr].filter(Boolean).join('\n');
+  }
+  youtubeHelpCache = { command, value: output };
+  return output;
+}
+
+function detectYoutubeJsRuntime() {
+  const deno = findTool('deno', ['--version']);
+  if (deno) {
+    try {
+      const version = execFileSync(deno, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+      const match = /deno\s+(\d+)\./i.exec(version);
+      if (match && Number(match[1]) >= 2) return { name: 'deno', path: deno };
+    } catch (e) { /* essayer Node.js */ }
+  }
+  const nodeVersion = /^v?(\d+)\./.exec(process.version);
+  if (nodeVersion && Number(nodeVersion[1]) >= 20) return { name: 'node', path: process.execPath };
+  const node = findTool('node', ['--version']);
+  if (node) {
+    try {
+      const version = execFileSync(node, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+      const match = /^v?(\d+)\./.exec(version.trim());
+      if (match && Number(match[1]) >= 20) return { name: 'node', path: node };
+    } catch (e) { /* aucun runtime compatible */ }
+  }
+  return null;
+}
+
+function youtubeCookiesPath() {
+  const configured = process.env.YOUTUBE_COOKIES_PATH;
+  if (!configured) return '';
+  const cookieFile = path.resolve(ROOT, configured);
+  let stat;
+  try {
+    stat = fs.statSync(cookieFile);
+    fs.accessSync(cookieFile, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (error) {
+    throw new Error('Le fichier YOUTUBE_COOKIES_PATH est introuvable ou inaccessible.');
+  }
+  if (!stat.isFile() || stat.size === 0) {
+    throw new Error('YOUTUBE_COOKIES_PATH doit désigner un fichier de cookies non vide.');
+  }
+  if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) {
+    throw new Error('Le fichier YOUTUBE_COOKIES_PATH est lisible par d’autres comptes; restreignez ses droits avec chmod 600.');
+  }
+  return cookieFile;
 }
 
 function ffmpegHelp(ffmpeg, target) {
@@ -802,7 +867,7 @@ function ffmpegHelp(ffmpeg, target) {
   return output;
 }
 
-function ffmpegSupports(help, option) {
+function helpSupportsOption(help, option) {
   const escaped = option.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp('^\\s*' + escaped + '(?:\\s|$)', 'm').test(help);
 }
@@ -959,8 +1024,8 @@ function av1Encoder(ffmpeg, globalHelp) {
   if (/\blibsvtav1\b/.test(out)) {
     const help = ffmpegHelp(ffmpeg, 'encoder=libsvtav1');
     const args = [];
-    if (ffmpegSupports(help, '-preset')) args.push('-preset', '8');
-    if (ffmpegSupports(help, '-crf')) args.push('-crf', '32');
+    if (helpSupportsOption(help, '-preset')) args.push('-preset', '8');
+    if (helpSupportsOption(help, '-crf')) args.push('-crf', '32');
     const encoder = { name: 'libsvtav1', args };
     av1EncoderCache.set(ffmpeg, encoder);
     return encoder;
@@ -968,10 +1033,10 @@ function av1Encoder(ffmpeg, globalHelp) {
   if (/\blibaom-av1\b/.test(out)) {
     const help = ffmpegHelp(ffmpeg, 'encoder=libaom-av1');
     const args = [];
-    if (ffmpegSupports(help, '-cpu-used')) args.push('-cpu-used', '8');
-    if (ffmpegSupports(help, '-row-mt')) args.push('-row-mt', '1');
-    if (ffmpegSupports(help, '-crf')) args.push('-crf', '32');
-    if (ffmpegSupports(globalHelp, '-strict')) args.push('-strict', '-2');
+    if (helpSupportsOption(help, '-cpu-used')) args.push('-cpu-used', '8');
+    if (helpSupportsOption(help, '-row-mt')) args.push('-row-mt', '1');
+    if (helpSupportsOption(help, '-crf')) args.push('-crf', '32');
+    if (helpSupportsOption(globalHelp, '-strict')) args.push('-strict', '-2');
     args.push('-b:v', '0');
     const encoder = { name: 'libaom-av1', args };
     av1EncoderCache.set(ffmpeg, encoder);
@@ -1047,6 +1112,18 @@ function processError(result, label) {
   return label + ' a échoué' + status + (detail ? ' : ' + detail : '');
 }
 
+function youtubeDownloadError(result) {
+  const detail = String(result.stderr || result.stdout || result.error || '');
+  let message = processError(result, 'yt-dlp');
+  if (/sign in to confirm|confirm you(?:'|’)re not a bot|not a bot/i.test(detail)) {
+    message += ' YouTube exige une session autorisée. Configurez YOUTUBE_COOKIES_PATH vers un export de cookies valide (compte dédié recommandé).';
+  }
+  if (/no supported javascript runtime|javascript runtime could not be found|youtube.*(?:ejs|javascript)/i.test(detail)) {
+    message += ' yt-dlp ne trouve pas de runtime JavaScript utilisable; installez Deno 2+ ou Node.js 20+ et mettez yt-dlp à jour.';
+  }
+  return message;
+}
+
 function finishCancelled(job) {
   job.stage = 'cancelled';
   job.message = 'Téléchargement annulé.';
@@ -1069,19 +1146,23 @@ function addYoutubeTab(job, title, relative) {
 }
 
 async function runYoutubeJob(job, tools) {
+  let publishedFile = '';
   try {
     const baseId = job.id;
+    const cookies = youtubeCookiesPath();
     const outputTemplate = path.join(YOUTUBE_DIR, baseId + '.%(ext)s');
     const args = [
       '--no-playlist',
       '--newline',
       '--progress',
-      '--no-part',
       '--write-info-json',
-      '--js-runtimes', 'node',
       '-f', 'bv*+ba/b',
       '-o', outputTemplate
     ];
+    if (tools.jsRuntime && tools.supportsJsRuntimes) {
+      args.push('--js-runtimes', tools.jsRuntime.name + ':' + tools.jsRuntime.path);
+    }
+    if (cookies) args.push('--cookies', cookies);
     if (tools.ffmpeg) {
       const ffmpegDir = path.dirname(tools.ffmpeg);
       if (ffmpegDir && ffmpegDir !== '.') args.push('--ffmpeg-location', ffmpegDir);
@@ -1102,7 +1183,7 @@ async function runYoutubeJob(job, tools) {
       }
     });
     if (job.cancelled) return finishCancelled(job);
-    if (download.code !== 0) throw new Error(processError(download, 'yt-dlp'));
+    if (download.code !== 0) throw new Error(youtubeDownloadError(download));
 
     job.stage = 'merging';
     job.progress = 82;
@@ -1119,7 +1200,7 @@ async function runYoutubeJob(job, tools) {
     const duration = probedDuration || (Number.isFinite(infoDuration) && infoDuration > 0 ? infoDuration : 0);
     const finalFile = path.join(YOUTUBE_DIR, baseId + '-final.mp4');
     const globalHelp = ffmpegGlobalHelp(tools.ffmpeg);
-    const mp4OutputOptions = ffmpegSupports(globalHelp, '-movflags')
+    const mp4OutputOptions = helpSupportsOption(globalHelp, '-movflags')
       ? ['-movflags', '+faststart']
       : [];
     if (codec === 'av1') {
@@ -1143,10 +1224,10 @@ async function runYoutubeJob(job, tools) {
       let elapsed = 0;
       let speed = '';
       const progressArgs = [];
-      if (ffmpegSupports(globalHelp, '-progress')) {
+      if (helpSupportsOption(globalHelp, '-progress')) {
         progressArgs.push('-progress', 'pipe:1');
-        if (ffmpegSupports(globalHelp, '-nostats')) progressArgs.push('-nostats');
-      } else if (ffmpegSupports(globalHelp, '-stats')) {
+        if (helpSupportsOption(globalHelp, '-nostats')) progressArgs.push('-nostats');
+      } else if (helpSupportsOption(globalHelp, '-stats')) {
         progressArgs.push('-stats');
       }
       const transcode = await spawnJobProcess(job, tools.ffmpeg, [
@@ -1187,8 +1268,10 @@ async function runYoutubeJob(job, tools) {
     const slug = safeFileName(title, job.id);
     const target = uniqueVideoPath(slug);
     fs.renameSync(finalFile, target);
+    publishedFile = target;
     cleanupJobFiles(baseId, target);
     addYoutubeTab(job, title, 'youtube/' + path.basename(target));
+    publishedFile = '';
 
     job.fileName = path.basename(target);
     job.tabName = job.name || title;
@@ -1206,6 +1289,11 @@ async function runYoutubeJob(job, tools) {
     job.message = job.error;
     job.finishedAt = Date.now();
     cleanupJobFiles(job.id, null);
+    if (publishedFile) {
+      try { fs.unlinkSync(publishedFile); } catch (cleanupError) {
+        console.error('[YouTube] Impossible de supprimer le fichier final incomplet :', cleanupError);
+      }
+    }
     console.error('[YouTube]', job.id, error);
   }
 }
@@ -1537,10 +1625,28 @@ async function handleApi(req, res, url) {
   if (p === '/api/youtube/jobs' && req.method === 'GET') {
     if (!hasAccess(req)) return fail(res, 401, 'Non autorisé');
     const tools = youtubeTools();
+    let cookiesConfigured = false;
+    let cookiesInvalid = false;
+    try { cookiesConfigured = Boolean(youtubeCookiesPath()); } catch (error) { cookiesInvalid = true; }
+    const cookiesPathSet = Boolean(process.env.YOUTUBE_COOKIES_PATH);
+    const available = Boolean(
+      tools.ytdlp && tools.ffmpeg && tools.jsRuntime && tools.supportsJsRuntimes &&
+      (!cookiesPathSet || (cookiesConfigured && tools.supportsCookies)) &&
+      !cookiesInvalid
+    );
     return json(res, 200, {
       ok: true,
-      available: Boolean(tools.ytdlp && tools.ffmpeg),
-      tools: { ytDlp: Boolean(tools.ytdlp), ffmpeg: Boolean(tools.ffmpeg), ffprobe: Boolean(tools.ffprobe) },
+      available,
+      tools: {
+        ytDlp: Boolean(tools.ytdlp),
+        ffmpeg: Boolean(tools.ffmpeg),
+        ffprobe: Boolean(tools.ffprobe),
+        jsRuntime: tools.jsRuntime ? tools.jsRuntime.name : '',
+        cookiesPathSet,
+        cookiesConfigured,
+        cookiesSupported: tools.supportsCookies,
+        jsRuntimesSupported: tools.supportsJsRuntimes
+      },
       jobs: [...youtubeJobs.values()]
         .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))
         .map(publicYoutubeJob)
@@ -1561,6 +1667,17 @@ async function handleApi(req, res, url) {
     const tools = youtubeTools();
     if (!tools.ytdlp) return fail(res, 503, 'yt-dlp est introuvable sur le serveur.');
     if (!tools.ffmpeg) return fail(res, 503, 'ffmpeg est introuvable sur le serveur.');
+    if (!tools.jsRuntime) return fail(res, 503, 'Runtime JavaScript absent : installez Deno 2+ ou Node.js 20+ pour yt-dlp.');
+    if (!tools.supportsJsRuntimes) return fail(res, 503, 'Cette version de yt-dlp ne prend pas en charge les runtimes JavaScript; mettez yt-dlp à jour.');
+    let cookies;
+    try {
+      cookies = youtubeCookiesPath();
+    } catch (error) {
+      return fail(res, 503, error.message);
+    }
+    if (cookies && !tools.supportsCookies) {
+      return fail(res, 503, 'Cette version de yt-dlp ne prend pas en charge les fichiers de cookies; mettez yt-dlp à jour.');
+    }
     const name = str(body.name, '', 80);
     const folderId = typeof body.folderId === 'string' ? body.folderId : '';
     if (folderId) {
