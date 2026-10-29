@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "CPV Cyclones Sport - Etude Video Viewer 2000",
+  "engines": {
+    "node": ">=10.19.0"
+  },
   "scripts": {
     "start": "node server.js"
   }

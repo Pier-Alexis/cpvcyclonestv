@@ -14,12 +14,13 @@ Dans **Fichiers vidéo**, l’admin peut envoyer plusieurs vidéos, rechercher e
 
 ## Téléchargement YouTube
 
-Le téléchargement YouTube requiert une version récente de `yt-dlp`, `ffmpeg`, `ffprobe`, ainsi que Deno 2+ ou Node.js 20+ pour l’extraction JavaScript. Le panneau admin indique si ces prérequis sont détectés. Installez les outils dans le `PATH` du compte qui exécute le service; redémarrez le service après leur installation ou leur mise à jour.
+Le serveur reste compatible avec Node.js 10.19.0 (version utilisée par certains déploiements); il n’est pas nécessaire de remplacer le Node.js partagé par d’autres processus. Le téléchargement YouTube requiert aussi une version récente de `yt-dlp`, `ffmpeg`, `ffprobe`, ainsi que Deno 2+ ou Node.js 20+ pour l’extraction JavaScript. Le panneau admin indique si ces prérequis sont détectés.
 
-Certaines vidéos exigent une session YouTube. Dans ce cas, exportez les cookies d’un compte autorisé vers un fichier Netscape sur le serveur, hors du dossier du site, puis configurez le service avec `YOUTUBE_COOKIES_PATH` pointant vers ce fichier. Pour systemd, créez un override avec `sudo systemctl edit cpvcyclones` :
+Dans le service systemd, rendez Deno visible avec `DENO_PATH=/home/acer/.deno/bin/deno`. La configuration fournie dans `deploy/cpvcyclones.service` contient ce chemin. Pour modifier le service déjà installé sans le remplacer, créez un override avec `sudo systemctl edit cpvcyclones` :
 
 ```ini
 [Service]
+Environment="DENO_PATH=/home/acer/.deno/bin/deno"
 Environment="YOUTUBE_COOKIES_PATH=/home/acer/private/youtube-cookies.txt"
 ```
 
