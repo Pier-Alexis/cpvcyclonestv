@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <title>CyclonesTV</title>
-<link rel="stylesheet" href="admin.css?v=18">
+<link rel="stylesheet" href="admin.css?v=19">
 <link rel="icon" type="image/png" href="logo.png">
 </head>
 <body data-accent="#22d3ee">
@@ -209,7 +209,7 @@
       <div class="card-head">
         <div>
           <h2>YouTube / Direct</h2>
-          <p class="muted-note">Collez un lien de direct ou de rediffusion. La vidéo est enregistrée sur le serveur en AV1 (natif si disponible, sinon convertie), puis ajoutée automatiquement comme onglet dans la catégorie choisie.</p>
+          <p class="muted-note">Collez un lien de direct ou de rediffusion. La vidéo est enregistrée sur le serveur en AV1 (natif si disponible, sinon convertie), puis ajoutée automatiquement comme onglet dans la catégorie choisie. Pour un live, vous pouvez aussi publier le lecteur YouTube sur l’accueil pendant son archivage.</p>
         </div>
       </div>
       <div class="yt-form">
@@ -223,6 +223,10 @@
           <select id="ytFolder"></select>
         </label>
         <button class="btn primary" id="ytStart" type="button">Lancer le téléchargement</button>
+        <label class="yt-live-option">
+          <input id="ytPublishLive" type="checkbox">
+          Afficher ce direct à tous les visiteurs de l’accueil
+        </label>
       </div>
       <p id="ytTools" class="muted-note"></p>
       <div id="ytJobs" class="yt-jobs"></div>
@@ -294,6 +298,6 @@
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="admin.js?v=23"></script>
+<script src="admin.js?v=24"></script>
 </body>
 </html>

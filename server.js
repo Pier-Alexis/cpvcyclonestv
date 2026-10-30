@@ -890,6 +890,21 @@ function normalizeYoutubeUrl(value) {
   return allowed.includes(host) ? parsed.toString() : '';
 }
 
+function youtubeVideoId(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (error) {
+    return '';
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  const pathId = /^\/(?:live|embed|shorts|v)\/([\w-]{11})(?:\/|$)/.exec(parsed.pathname);
+  const id = host === 'youtu.be'
+    ? parsed.pathname.split('/').filter(Boolean)[0]
+    : parsed.searchParams.get('v') || (pathId && pathId[1]);
+  return id && /^[\w-]{11}$/.test(id) ? id : '';
+}
+
 function safeFileName(text, fallback) {
   let base = String(text || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
   base = base.replace(/['’]/g, '').replace(/[^\w\s.-]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1311,6 +1326,7 @@ function publicYoutubeJob(job) {
     message: job.message,
     fileName: job.fileName,
     tabName: job.tabName,
+    publishLive: Boolean(job.publishLive),
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     error: job.error
@@ -1329,6 +1345,18 @@ function pruneYoutubeJobs() {
 
 async function handleApi(req, res, url) {
   const p = url.pathname;
+
+  if (p === '/api/youtube/live' && req.method === 'GET') {
+    const job = [...youtubeJobs.values()]
+      .filter((entry) => entry.publishLive && (entry.stage === 'preparing' || entry.stage === 'downloading'))
+      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    return json(res, 200, {
+      ok: true,
+      live: job && job.videoId
+        ? { videoId: job.videoId, title: job.name || job.title || 'Direct YouTube' }
+        : null
+    });
+  }
 
   if (p === '/api/athlete/login' && req.method === 'POST') {
     let body;
@@ -1664,6 +1692,12 @@ async function handleApi(req, res, url) {
     body = body && typeof body === 'object' ? body : {};
     const youtubeUrl = normalizeYoutubeUrl(body.url);
     if (!youtubeUrl) return fail(res, 400, 'Lien YouTube invalide.');
+    const publishLive = body.publishLive === true;
+    const videoId = publishLive ? youtubeVideoId(youtubeUrl) : '';
+    if (publishLive && !videoId) return fail(res, 400, 'Impossible de détecter l’identifiant de la vidéo YouTube à diffuser.');
+    if (publishLive && [...youtubeJobs.values()].some((job) => job.publishLive && YOUTUBE_STAGES_ACTIVE.has(job.stage))) {
+      return fail(res, 409, 'Un autre direct est déjà publié sur l’accueil.');
+    }
     const tools = youtubeTools();
     if (!tools.ytdlp) return fail(res, 503, 'yt-dlp est introuvable sur le serveur.');
     if (!tools.ffmpeg) return fail(res, 503, 'ffmpeg est introuvable sur le serveur.');
@@ -1694,6 +1728,8 @@ async function handleApi(req, res, url) {
       id,
       url: youtubeUrl,
       name,
+      publishLive,
+      videoId,
       title: '',
       folderId,
       stage: 'preparing',

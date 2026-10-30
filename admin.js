@@ -1662,6 +1662,9 @@ function renderYoutubeJobs(jobs) {
     const cancel = active
       ? '<button class="btn small danger" type="button" data-yt-cancel="' + esc(job.id) + '">Annuler</button>'
       : '';
+    const live = job.publishLive && (job.stage === 'preparing' || job.stage === 'downloading')
+      ? '<span class="yt-live-public">Publié sur l’accueil</span>'
+      : '';
     const file = job.fileName ? '<span class="yt-file">' + esc(job.fileName) + '</span>' : '';
     const folder = folderPathName(job.folderId, config.folders) || 'Racine';
     return '<article class="yt-job ' + esc(job.stage) + '">' +
@@ -1669,7 +1672,7 @@ function renderYoutubeJobs(jobs) {
         '<span class="yt-stage">' + esc(label) + '</span>' + cancel + '</div>' +
       '<div class="yt-progress"><span' + (indeterminate ? ' class="indeterminate"' : ' style="width:' + pct + '%"') + '></span></div>' +
       '<div class="yt-job-meta"><span>' + esc(job.message || '') + '</span><span>' + (indeterminate ? 'En cours' : pct + ' %') + '</span></div>' +
-      '<div class="yt-job-foot"><span>' + esc(folder) + '</span>' + file + '</div>' +
+      '<div class="yt-job-foot"><span>' + esc(folder) + '</span>' + live + file + '</div>' +
     '</article>';
   }).join('');
 }
@@ -1743,10 +1746,16 @@ function bindYoutube() {
       await api('/api/youtube/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, name: $('#ytName').value.trim(), folderId: $('#ytFolder').value })
+        body: JSON.stringify({
+          url,
+          name: $('#ytName').value.trim(),
+          folderId: $('#ytFolder').value,
+          publishLive: $('#ytPublishLive').checked
+        })
       });
       $('#ytUrl').value = '';
       $('#ytName').value = '';
+      $('#ytPublishLive').checked = false;
       recordAction('Téléchargement YouTube lancé', 'info');
       toast('Téléchargement lancé.', 'ok');
       await refreshYoutubeJobs();

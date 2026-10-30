@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <title>CyclonesTV</title>
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 <link rel="icon" type="image/png" href="logo.png">
 </head>
 <body>
@@ -27,6 +27,9 @@
   </div>
 
   <div class="top-actions">
+    <button class="btn ghost live-tab" id="liveTab" type="button" aria-pressed="false">
+      <span class="live-dot" aria-hidden="true"></span>En direct
+    </button>
     <button class="btn ghost" id="sidebarToggle" type="button" title="Afficher / masquer les timecodes (S)">
       <span class="btn-ico">&#9776;</span> Timecodes
     </button>
@@ -39,6 +42,13 @@
     <div class="player" id="player">
       <div class="videos" id="videos"></div>
       <div class="photo-gallery" id="photoGallery" hidden aria-label="Galerie photo"></div>
+      <section class="live-panel" id="livePanel" hidden aria-label="Diffusion en direct">
+        <div class="live-empty" id="liveEmpty" role="status" aria-live="polite">
+          <h2 id="liveTitle">Aucun direct en cours</h2>
+          <p id="liveMessage">Un administrateur peut lancer un direct depuis le panneau YouTube / Direct.</p>
+        </div>
+        <iframe id="liveFrame" title="Direct YouTube" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" hidden></iframe>
+      </section>
 
       <button class="big-play" id="bigPlay" type="button" aria-label="Lire">&#9654;</button>
 
@@ -127,6 +137,6 @@
   </div>
 </div>
 
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>

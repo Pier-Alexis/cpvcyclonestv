@@ -411,6 +411,8 @@ input.err { border-color: var(--danger); }
   gap: 10px;
   align-items: end;
 }
+.yt-live-option { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+.yt-live-option input { width: auto; margin: 0; }
 #ytTools { margin-top: 14px; }
 #ytTools.err { color: var(--danger); }
 .yt-jobs { display: grid; gap: 10px; margin-top: 16px; }
@@ -433,6 +435,7 @@ input.err { border-color: var(--danger); }
 .yt-job-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12.5px; }
 .yt-job-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--muted); font-size: 12px; }
 .yt-file { color: var(--text); word-break: break-all; }
+.yt-live-public { color: #f08080; font-weight: 700; }
 
 @media (max-width: 720px) {
   .yt-form { grid-template-columns: 1fr; }

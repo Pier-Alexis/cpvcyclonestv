@@ -10,7 +10,7 @@ Ouvrez `/admin.html` pour gérer le site. Changez le mot de passe administrateur
 
 ## Gestion des vidéos
 
-Dans **Fichiers vidéo**, l’admin peut envoyer plusieurs vidéos, rechercher et trier le catalogue, sélectionner des fichiers, les déplacer vers un sous-dossier existant, les renommer ou les supprimer. Le déplacement et le renommage mettent aussi à jour les références des onglets et des qualités configurées. Les dossiers de stockage sont sous `videos/`.
+Dans **Fichiers vidéo**, l’admin peut envoyer plusieurs vidéos, rechercher et trier le catalogue, sélectionner des fichiers, les déplacer vers un sous-dossier existant, les renommer ou les supprimer. Le déplacement et le renommage mettent aussi à jour les références des onglets et des qualités configurées. Les dossiers de stockage sont sous `videos/`. Les fichiers WebM sont lus directement par le lecteur HTML5 du navigateur si leurs codecs sont pris en charge (VP8/VP9 et Opus sont les plus compatibles).
 
 ## Téléchargement YouTube
 
@@ -21,10 +21,12 @@ Dans le service systemd, rendez Deno visible avec `DENO_PATH=/home/acer/.deno/bi
 ```ini
 [Service]
 Environment="DENO_PATH=/home/acer/.deno/bin/deno"
-Environment="YOUTUBE_COOKIES_PATH=/home/acer/private/youtube-cookies.txt"
+Environment="YOUTUBE_COOKIES_PATH=/home/acer/cpvcyclonesviewer/cookies.txt"
 ```
 
-Le fichier doit être lisible uniquement par le compte du service (par exemple `chmod 600` et propriétaire `acer`). Les cookies donnent accès à la session : utilisez si possible un compte dédié, ne les commitez pas, ne les placez pas dans le dossier du site et ne les partagez pas. Après configuration, redémarrez avec `sudo systemctl restart cpvcyclones`. Les cookies expirent parfois et peuvent devoir être réexportés. La configuration ne contourne pas les restrictions de YouTube et seuls les contenus auxquels le compte a accès peuvent être téléchargés.
+`YOUTUBE_COOKIES_PATH` doit désigner le fichier exporté depuis Firefox au format Netscape accepté par yt-dlp (`--cookies`). Le fichier doit être lisible uniquement par le compte du service (par exemple `chmod 600` et propriétaire `acer`). Les cookies donnent accès à la session : utilisez si possible un compte dédié, ne les commitez pas, ne les placez pas dans le dossier du site et ne les partagez pas. Après configuration, redémarrez avec `sudo systemctl restart cpvcyclones`. Les cookies expirent parfois et peuvent devoir être réexportés. La configuration ne contourne pas les restrictions de YouTube et seuls les contenus auxquels le compte a accès peuvent être téléchargés.
+
+Pour publier un direct sur l’accueil, cochez **Afficher ce direct à tous les visiteurs de l’accueil** avant de lancer son téléchargement. Le bouton **En direct** apparaît dans le viewer; il intègre le lecteur YouTube officiel pendant que le serveur archive la vidéo. Cette diffusion est publique pour les visiteurs du site et n’est pas le fichier d’archive en cours d’écriture. Un seul direct peut être publié à la fois; l’affichage s’arrête lorsque le téléchargement du direct se termine.
 
 ## Photos
 

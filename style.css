@@ -118,6 +118,13 @@ code { background: rgba(255, 255, 255, .08); padding: 1px 5px; border-radius: 5p
   background: #315f80;
   border-color: #315f80;
 }
+.live-tab { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.live-tab.active { color: #fff; background: #8d2929; border-color: #8d2929; }
+#sidebarToggle[hidden] { display: none; }
+.live-dot { display: none; width: 8px; height: 8px; border-radius: 50%; background: #f45b5b; }
+.live-tab.has-live .live-dot { display: inline-block; }
+.live-tab.active .live-dot { display: inline-block; animation: live-pulse 1.4s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .35; } }
 .folder-current {
   align-self: center;
   color: var(--accent);
@@ -184,6 +191,26 @@ code { background: rgba(255, 255, 255, .08); padding: 1px 5px; border-radius: 5p
 }
 .videos video:focus { outline: none; }
 .videos video.hidden { display: none; }
+
+.live-panel {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+}
+.live-panel[hidden] { display: none; }
+.live-panel iframe { width: 100%; height: 100%; border: 0; }
+.live-empty { max-width: 520px; padding: 24px; text-align: center; }
+.live-empty h2 { margin: 0 0 8px; font-size: clamp(20px, 3vw, 30px); }
+.live-empty p { margin: 0; color: var(--muted); }
+.player.live-mode .videos,
+.player.live-mode .photo-gallery,
+.player.live-mode > .big-play,
+.player.live-mode > .chip,
+.player.live-mode > .hint,
+.player.live-mode > .video-error,
+.player.live-mode > .controls { display: none; }
 
 .photo-gallery {
   position: absolute;

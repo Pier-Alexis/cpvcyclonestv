@@ -9,6 +9,7 @@ WorkingDirectory=/home/acer/cpvcyclonesviewer
 Environment=BEHIND_CADDY=1
 Environment=PORT=8080
 Environment=DENO_PATH=/home/acer/.deno/bin/deno
+Environment=YOUTUBE_COOKIES_PATH=/home/acer/cpvcyclonesviewer/cookies.txt
 ExecStart=/usr/bin/node /home/acer/cpvcyclonesviewer/server.js
 Restart=on-failure
 RestartSec=5

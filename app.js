@@ -11,6 +11,12 @@ const els = {
   tabsScrollLeft: $('#tabsScrollLeft'),
   tabsScrollRight: $('#tabsScrollRight'),
   videos: $('#videos'),
+  liveTab: $('#liveTab'),
+  livePanel: $('#livePanel'),
+  liveFrame: $('#liveFrame'),
+  liveEmpty: $('#liveEmpty'),
+  liveTitle: $('#liveTitle'),
+  liveMessage: $('#liveMessage'),
   photoGallery: $('#photoGallery'),
   player: $('#player'),
   bigPlay: $('#bigPlay'),
@@ -51,6 +57,9 @@ let config = null;
 let configReady = false;
 let videos = [];
 let active = 0;
+let liveMode = false;
+let liveVideoId = '';
+let liveRequestPending = false;
 let currentFolderId = '';
 let qualityChoice = {};
 let onReadyCallbacks = [];
@@ -432,8 +441,8 @@ function applyConfig() {
     v.addEventListener('error', () => {
       if (i === active && v.currentSrc) {
           const msg = 'Cette vidéo ne peut pas être lue';
-          recordVideoError(msg, v.currentSrc + ' — Vérifiez que le fichier utilise un codec pris en charge par ce navigateur (MP4 H.264/AAC recommandé).');
-          showVideoError(msg, v.currentSrc + ' — Vérifiez que le fichier utilise un codec pris en charge par ce navigateur (MP4 H.264/AAC recommandé).');
+          recordVideoError(msg, v.currentSrc + ' — Vérifiez que le fichier utilise un codec pris en charge par ce navigateur (MP4 H.264/AAC ou WebM VP8/VP9 recommandé).');
+          showVideoError(msg, v.currentSrc + ' — Vérifiez que le fichier utilise un codec pris en charge par ce navigateur (MP4 H.264/AAC ou WebM VP8/VP9 recommandé).');
       }
     });
     v.addEventListener('loadeddata', () => { if (i === active && !v.error) els.videoError.hidden = true; });
@@ -538,6 +547,7 @@ function showTransientMessage(message) {
 /* ============================== Tabs ============================== */
 
 function selectTab(i) {
+  if (liveMode) setLiveMode(false);
   if (i === active || i < 0 || i >= videos.length) return;
   closeSettings();
   const prev = curVideo();
@@ -773,6 +783,64 @@ function updateChip() {
   }
 }
 
+function setLiveMode(enabled) {
+  liveMode = Boolean(enabled);
+  els.player.classList.toggle('live-mode', liveMode);
+  els.livePanel.hidden = !liveMode;
+  els.liveTab.classList.toggle('active', liveMode);
+  els.liveTab.setAttribute('aria-pressed', String(liveMode));
+  $('#sidebarToggle').hidden = liveMode;
+  if (liveMode) {
+    closeSettings();
+    closeSidebar();
+    refreshLiveStatus();
+  } else {
+    els.liveFrame.removeAttribute('src');
+    els.liveFrame.hidden = true;
+    liveVideoId = '';
+  }
+}
+
+async function refreshLiveStatus() {
+  if (liveRequestPending) return;
+  liveRequestPending = true;
+  try {
+    const response = await fetch('/api/youtube/live', { cache: 'no-store' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+    const live = data.live;
+    const validVideoId = live && /^[\w-]{11}$/.test(live.videoId) ? live.videoId : '';
+    els.liveTab.classList.toggle('has-live', Boolean(validVideoId));
+    if (!liveMode) return;
+    if (!validVideoId) {
+      if (liveVideoId) els.liveFrame.removeAttribute('src');
+      liveVideoId = '';
+      els.liveFrame.hidden = true;
+      els.liveEmpty.hidden = false;
+      els.liveTitle.textContent = 'Aucun direct en cours';
+      els.liveMessage.textContent = 'Un administrateur peut lancer un direct depuis le panneau YouTube / Direct.';
+      return;
+    }
+    if (liveVideoId !== validVideoId) {
+      liveVideoId = validVideoId;
+      els.liveFrame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(validVideoId) + '?playsinline=1';
+    }
+    els.liveTitle.textContent = live.title || 'Direct YouTube';
+    els.liveMessage.textContent = 'Lecture intégrée YouTube pendant l’archivage du direct sur le serveur.';
+    els.liveFrame.title = 'Direct YouTube : ' + (live.title || 'En direct');
+    els.liveEmpty.hidden = true;
+    els.liveFrame.hidden = false;
+  } catch (error) {
+    if (liveMode && !liveVideoId) {
+      els.liveEmpty.hidden = false;
+      els.liveTitle.textContent = 'Direct indisponible';
+      els.liveMessage.textContent = 'Impossible de vérifier le direct pour le moment. Réessayez dans quelques instants.';
+    }
+  } finally {
+    liveRequestPending = false;
+  }
+}
+
 function showTip(anchor, label, time) {
   els.tip.innerHTML = '<b>' + esc(label) + '</b> &nbsp;' + time;
   els.tip.hidden = false;
@@ -931,6 +999,9 @@ function closeSettings() {
 /* ============================== Events ============================== */
 
 function initEvents() {
+  els.liveTab.addEventListener('click', () => setLiveMode(!liveMode));
+  setInterval(refreshLiveStatus, 15000);
+  refreshLiveStatus();
   els.tabsScrollLeft.addEventListener('click', () => {
     els.tabs.scrollBy({ left: -els.tabs.clientWidth * 0.8, behavior: 'smooth' });
   });
@@ -980,6 +1051,7 @@ function initEvents() {
     }
     const tag = (e.target.tagName || '').toUpperCase();
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'A') return;
+    if (liveMode) return;
     const isPlayPauseKey = e.code === 'Space' || e.key === ' ' || e.key.toLowerCase() === 'k';
     if (e.repeat && isPlayPauseKey) return;
     if (tag === 'BUTTON' && isPlayPauseKey) return;
